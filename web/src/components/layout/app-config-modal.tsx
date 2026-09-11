@@ -13,6 +13,7 @@ import type { AppLocale } from "@/i18n";
 import { exportAppConfig, importAppConfig } from "@/services/config-file";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
+import { fetchBillingSummary, formatUsd, type BillingSummary } from "@/services/api/billing";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
 import { createModelChannel, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 
@@ -199,6 +200,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                                 <div className="mt-1 truncate text-xs text-stone-500">
                                                     {apiFormatLabel(channel.apiFormat)} · {t("config.channels.modelCount", { count: channel.models.length })} · {channel.baseUrl || t("config.channels.missingUrl")}
                                                 </div>
+                                                <ChannelBalance baseUrl={channel.baseUrl} apiKey={channel.apiKey} />
                                             </div>
                                             <div className="flex shrink-0 gap-2">
                                                 <Button size="small" icon={<Pencil className="size-3.5" />} onClick={() => setEditingChannelId(channel.id)}>
@@ -472,4 +474,34 @@ function formatBytes(bytes: number) {
     if (bytes < 1024) return `${bytes}B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
     return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+/**
+ * 渠道余额。只对 llmway 渠道生效，其余情况什么都不渲染 ——
+ * 取不到时宁可不显示，也不要显示 0，那会被当成「余额真的用完了」。
+ */
+function ChannelBalance({ baseUrl, apiKey }: { baseUrl: string; apiKey: string }) {
+    const { t } = useTranslation();
+    const [summary, setSummary] = useState<BillingSummary | null>(null);
+
+    useEffect(() => {
+        let alive = true;
+        void fetchBillingSummary(baseUrl, apiKey).then((result) => {
+            if (alive) setSummary(result);
+        });
+        return () => {
+            alive = false;
+        };
+    }, [baseUrl, apiKey]);
+
+    if (!summary) return null;
+    return (
+        <div className="mt-1 truncate text-xs text-stone-500">
+            {t("config.channels.balance")}
+            <span className="ml-1 font-medium tabular-nums text-emerald-600 dark:text-emerald-500">{formatUsd(summary.remainingUsd)}</span>
+            <span className="ml-1 opacity-70">
+                / {formatUsd(summary.totalUsd)} · {t("config.channels.used")} {formatUsd(summary.usedUsd)}
+            </span>
+        </div>
+    );
 }

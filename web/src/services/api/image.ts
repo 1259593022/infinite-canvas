@@ -1,7 +1,8 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
-import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { buildApiUrl, guessCapability, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig, type ChannelModel, type ModelChannel } from "@/stores/use-config-store";
+import { fetchPricingCatalog, isPricingChannel, refineCapability } from "./pricing";
 import { normalizePluginImages, runModelPlugin } from "./model-plugin";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
@@ -910,6 +911,24 @@ export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKe
 
 export async function fetchChannelModels(channel: ModelChannel) {
     return fetchImageModels({ baseUrl: channel.baseUrl, apiKey: channel.apiKey, apiFormat: channel.apiFormat });
+}
+
+/**
+ * 拉取模型列表，并在渠道由 llmway 提供时补上真实的计费方式与单价。
+ *
+ * 定价拉取失败或渠道不是 llmway 时静默降级为关键词猜测 —— 模型列表是主流程，
+ * 不能因为增强信息取不到就整个失败。
+ */
+export async function fetchChannelModelsDetailed(channel: ModelChannel): Promise<ChannelModel[]> {
+    const [names, pricing] = await Promise.all([
+        fetchChannelModels(channel),
+        isPricingChannel(channel.baseUrl) ? fetchPricingCatalog() : Promise.resolve(new Map()),
+    ]);
+    return names.map((name) => {
+        const entry = pricing.get(name);
+        const capability = refineCapability(name, entry, guessCapability(name));
+        return entry ? { name, capability, price: entry.modelPrice, quotaType: entry.quotaType } : { name, capability };
+    });
 }
 
 const defaultGeminiConfig: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat" | "model" | "systemPrompt"> = {

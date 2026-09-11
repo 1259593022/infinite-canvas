@@ -485,6 +485,8 @@ export default {
             numberedName: "Provider {{count}}",
             modelCount: "{{count}} models",
             missingUrl: "API endpoint not set",
+            balance: "Balance",
+            used: "used",
             keepOne: "Keep at least one provider",
             defaultName: "Default provider",
             newName: "New provider",

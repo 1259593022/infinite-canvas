@@ -3,8 +3,9 @@ import { RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { fetchChannelModels } from "@/services/api/image";
-import type { ModelChannel } from "@/stores/use-config-store";
+import { fetchChannelModelsDetailed } from "@/services/api/image";
+import { formatUnitPrice } from "@/services/api/pricing";
+import type { ChannelModel, ModelChannel } from "@/stores/use-config-store";
 
 // Channel model selector: fetch upstream models or add them manually, then include checked models in the channel list.
 export function ModelSelectModal({ open, channel, selectedNames, onConfirm, onClose }: { open: boolean; channel: ModelChannel | null; selectedNames: string[]; onConfirm: (names: string[]) => void; onClose: () => void }) {
@@ -17,11 +18,14 @@ export function ModelSelectModal({ open, channel, selectedNames, onConfirm, onCl
     const [search, setSearch] = useState("");
     const [manual, setManual] = useState("");
     const [loading, setLoading] = useState(false);
+    // 名字仍是选择逻辑的唯一标识；能力与单价旁挂在这里，只用于展示。
+    const [details, setDetails] = useState<Map<string, ChannelModel>>(new Map());
 
     useEffect(() => {
         if (!open) return;
         setExisting(selectedNames);
         setFetched([]);
+        setDetails(new Map());
         setSelected(new Set(selectedNames));
         setActiveTab(selectedNames.length ? "existing" : "new");
         setSearch("");
@@ -67,8 +71,9 @@ export function ModelSelectModal({ open, channel, selectedNames, onConfirm, onCl
         }
         setLoading(true);
         try {
-            const models = await fetchChannelModels(channel);
-            setFetched(models);
+            const models = await fetchChannelModelsDetailed(channel);
+            setFetched(models.map((model) => model.name));
+            setDetails(new Map(models.map((model) => [model.name, model])));
             setActiveTab("new");
             message.success(t("config.modelSelect.fetched", { count: models.length }));
         } catch (error) {
@@ -139,13 +144,21 @@ export function ModelSelectModal({ open, channel, selectedNames, onConfirm, onCl
 
             {visibleList.length ? (
                 <div className="grid grid-cols-1 gap-x-8 gap-y-3 md:grid-cols-2">
-                    {visibleList.map((name) => (
-                        <Checkbox key={name} checked={selected.has(name)} onChange={(event) => toggle(name, event.target.checked)}>
-                            <span className="truncate" title={name}>
-                                {name}
-                            </span>
-                        </Checkbox>
-                    ))}
+                    {visibleList.map((name) => {
+                        const detail = details.get(name);
+                        const price = formatUnitPrice(detail?.price, detail?.quotaType);
+                        return (
+                            <Checkbox key={name} checked={selected.has(name)} onChange={(event) => toggle(name, event.target.checked)}>
+                                <span className="flex min-w-0 items-center gap-2">
+                                    <span className="truncate" title={name}>
+                                        {name}
+                                    </span>
+                                    {detail ? <span className="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500 dark:bg-stone-800 dark:text-stone-400">{t(`settingsPanels.model.capabilities.${detail.capability}`)}</span> : null}
+                                    {price ? <span className="shrink-0 text-[11px] tabular-nums text-emerald-600 dark:text-emerald-500">{price}</span> : null}
+                                </span>
+                            </Checkbox>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="py-8 text-center text-sm text-stone-500">{t(activeTab === "new" ? "config.modelSelect.fetchedEmpty" : "config.modelSelect.existingEmpty")}</div>

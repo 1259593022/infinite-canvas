@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { defaultBaseUrlForApiFormat, guessCapability, normalizeChannelModels, type ApiCallFormat, type ChannelModel, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { fetchPricingCatalog, isPricingChannel, refineCapability } from "@/services/api/pricing";
 import { ModelScriptEditor } from "./model-script-editor";
 import { ModelSelectModal } from "./model-select-modal";
 
@@ -34,9 +35,20 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
         patch({ apiFormat, baseUrl });
     };
 
-    const applySelection = (names: string[]) => {
+    const applySelection = async (names: string[]) => {
         const map = new Map(draft.models.map((model) => [model.name, model]));
-        setModels(names.map((name) => map.get(name) || { name, capability: guessCapability(name) }));
+        const base = names.map((name) => map.get(name) || { name, capability: guessCapability(name) });
+        // 保留脚本等本地设置，但能力与单价以上游为准（用户选择「覆盖」）。
+        // 非 llmway 渠道或定价拉取失败时 catalog 为空，整体退回原有行为。
+        if (!isPricingChannel(draft.baseUrl)) return setModels(base);
+        const catalog = await fetchPricingCatalog();
+        setModels(
+            base.map((model) => {
+                const entry = catalog.get(model.name);
+                if (!entry) return model;
+                return { ...model, capability: refineCapability(model.name, entry, model.capability), price: entry.modelPrice, quotaType: entry.quotaType };
+            }),
+        );
     };
 
     const setCapability = (name: string, capability: ModelCapability) => setModels(draft.models.map((model) => (model.name === name ? { ...model, capability } : model)));
@@ -114,7 +126,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 )}
             </div>
 
-            <ModelSelectModal open={selectOpen} channel={draft} selectedNames={draft.models.map((model) => model.name)} onConfirm={applySelection} onClose={() => setSelectOpen(false)} />
+            <ModelSelectModal open={selectOpen} channel={draft} selectedNames={draft.models.map((model) => model.name)} onConfirm={(names) => void applySelection(names)} onClose={() => setSelectOpen(false)} />
 
             <ModelScriptEditor
                 open={Boolean(scriptTarget)}

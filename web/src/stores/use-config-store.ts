@@ -13,6 +13,10 @@ export type ChannelModel = {
     name: string;
     capability: ModelCapability;
     script?: string;
+    /** 按次计费的单价（美元），来自上游 /api/pricing。仅 quotaType===1 时有意义。 */
+    price?: number;
+    /** 1 = 按次计费，0 = 按 token 计费。缺省表示未从上游取到定价信息。 */
+    quotaType?: 0 | 1;
 };
 
 export type ModelChannel = {
@@ -173,6 +177,12 @@ function findChannelModel(config: AiConfig, value: string): { channel: ModelChan
 
 export function modelCapabilityOf(config: AiConfig, value: string): ModelCapability | undefined {
     return findChannelModel(config, value)?.model.capability;
+}
+
+/** 模型的按次单价与计费方式，供界面展示费用预估；未从上游取到定价时两者均为 undefined。 */
+export function modelUnitPrice(config: AiConfig, value: string): [number | undefined, (0 | 1) | undefined] {
+    const model = findChannelModel(config, value)?.model;
+    return [model?.price, model?.quotaType];
 }
 
 export function modelMatchesCapability(config: AiConfig, value: string, capability?: ModelCapability) {

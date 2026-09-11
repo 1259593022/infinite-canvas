@@ -18,7 +18,7 @@ import { resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
-import { boolConfig, modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { boolConfig, modelOptionLabel, selectableModelsByCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
@@ -102,7 +102,10 @@ export default function VideoPage() {
     const agentTaskIdRef = useRef<string | undefined>(undefined);
 
     const model = effectiveConfig.videoModel || effectiveConfig.model;
-    const canGenerate = Boolean(prompt.trim());
+    // 没有任何视频模型时不该让「开始生成」可点：原先只校验提示词，结果请求发出去撞 503，
+    // UI 只显示一句「生成失败」，用户无从判断是没配模型还是上游挂了。
+    const hasVideoModel = Boolean(model) && selectableModelsByCapability(effectiveConfig, "video").length > 0;
+    const canGenerate = Boolean(prompt.trim()) && hasVideoModel;
 
     useEffect(() => {
         if (!running || !startedAt) return;
