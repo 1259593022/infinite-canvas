@@ -16,12 +16,21 @@ import { useUserStore } from "@/stores/use-user-store";
 /** 改动后等这么久再推。太短会在连续拖拽节点时反复全量扫描，太长则丢数据的窗口变大。 */
 const DEBOUNCE_MS = 10_000;
 
+/**
+ * 距离上次同步最多拖这么久。
+ *
+ * 光有防抖不够：连续编辑时每次改动都会重置计时器，一直不停手就一直不同步。
+ * 有了这个上限，持续创作期间最长 60 秒也会落一次盘。
+ */
+const MAX_WAIT_MS = 60_000;
+
 export function useCloudSync() {
     const userId = useUserStore((state) => state.user?.id || "");
     const fetchMe = useUserStore((state) => state.fetchMe);
     const running = useRef(false);
     const pendingChange = useRef(false);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const firstChangeAt = useRef(0);
 
     useEffect(() => {
         if (!userId) return;
@@ -34,6 +43,11 @@ export function useCloudSync() {
             }
             running.current = true;
             pendingChange.current = false;
+            firstChangeAt.current = 0;
+            if (timer.current) {
+                clearTimeout(timer.current);
+                timer.current = null;
+            }
             try {
                 await syncAppData(serverTransport);
                 // 同步会改变已用容量，顺带刷新一次配额，让账号弹窗里的数字是新的
@@ -48,8 +62,12 @@ export function useCloudSync() {
         };
 
         const schedule = () => {
+            const now = Date.now();
+            if (!firstChangeAt.current) firstChangeAt.current = now;
             if (timer.current) clearTimeout(timer.current);
-            timer.current = setTimeout(() => void run(), DEBOUNCE_MS);
+            // 防抖正常推迟，但不得把第一笔改动拖过 MAX_WAIT_MS
+            const delay = Math.max(0, Math.min(DEBOUNCE_MS, firstChangeAt.current + MAX_WAIT_MS - now));
+            timer.current = setTimeout(() => void run(), delay);
         };
 
         // 登录后先跑一次：把云端已有的数据拉下来，同时把本地的推上去
