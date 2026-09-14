@@ -5,6 +5,9 @@ import { useTranslation } from "react-i18next";
 
 import { useConfigStore } from "@/stores/use-config-store";
 import { useUserStore } from "@/stores/use-user-store";
+import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useAssetStore } from "@/stores/use-asset-store";
+import { ensurePersistentStorage } from "@/lib/storage-persistence";
 import { useCloudSync } from "@/hooks/use-cloud-sync";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 
@@ -30,6 +33,30 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     useEffect(() => {
         void fetchMe();
     }, [fetchMe]);
+
+    // 有作品之后就把站点标记为持久化存储，否则浏览器可能在磁盘紧张时
+    // 或（Safari）超过 7 天没访问时把整站数据清掉。
+    useEffect(() => {
+        let requested = false;
+        const check = () => {
+            // 只申请一次，且必须等本地数据加载完 —— 否则会把「还没读出来」当成「没有作品」
+            if (requested) return;
+            const canvas = useCanvasStore.getState();
+            const assets = useAssetStore.getState();
+            if (!canvas.hydrated || !assets.hydrated) return;
+            if (!canvas.projects.length && !assets.assets.length) return;
+            requested = true;
+            void ensurePersistentStorage(true);
+        };
+        check();
+        // 首次访问时还没有作品，等他真的画了东西再申请，别对空白页面弹权限框
+        const unsubscribeCanvas = useCanvasStore.subscribe(check);
+        const unsubscribeAssets = useAssetStore.subscribe(check);
+        return () => {
+            unsubscribeCanvas();
+            unsubscribeAssets();
+        };
+    }, []);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

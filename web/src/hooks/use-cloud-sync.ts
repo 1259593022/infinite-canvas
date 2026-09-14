@@ -76,17 +76,26 @@ export function useCloudSync() {
         const unsubscribeCanvas = useCanvasStore.subscribe(schedule);
         const unsubscribeAssets = useAssetStore.subscribe(schedule);
 
-        // 关标签页/切走之前抢救一次，否则防抖窗口里的改动会丢
-        const onHidden = () => {
-            if (document.visibilityState !== "hidden") return;
+        // 切走或关页面之前抢救一次，否则防抖窗口里的改动来不及推上去。
+        // 两个事件都听：visibilitychange 覆盖切标签页，pagehide 覆盖直接关窗口和跳转离开
+        // （关窗口时 visibilitychange 并不总会触发）。
+        //
+        // 注意这只是尽力而为——页面正在销毁，异步请求未必跑得完。真正的保底是本地
+        // IndexedDB 一直有完整副本，下次打开会把落下的改动合并上去。
+        const flush = () => {
             if (timer.current) clearTimeout(timer.current);
             void run();
         };
-        document.addEventListener("visibilitychange", onHidden);
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "hidden") flush();
+        };
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        window.addEventListener("pagehide", flush);
 
         return () => {
             if (timer.current) clearTimeout(timer.current);
-            document.removeEventListener("visibilitychange", onHidden);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            window.removeEventListener("pagehide", flush);
             unsubscribeCanvas();
             unsubscribeAssets();
         };
