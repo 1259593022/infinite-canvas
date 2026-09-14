@@ -66,6 +66,30 @@ export async function fetchBillingSummary(baseUrl: string, apiKey: string): Prom
     return { unlimited: false, totalUsd, usedUsd, remainingUsd: Math.max(0, totalUsd - usedUsd) };
 }
 
+export type AccountBalance = {
+    totalUsd: number;
+    usedUsd: number;
+    remainingUsd: number;
+};
+
+/**
+ * 账户余额，由画布后端用上游的用户级访问令牌（PAT）代查。
+ *
+ * 和上面那个按 API Key 查的路子是两回事：这条走上游的 /api/user/self，不受
+ * 「显示令牌额度」开关影响，所以无限额度令牌也能拿到真实余额。
+ * 未登录、未开通、没留 PAT 或上游不可达时返回 null —— 调用方据此隐藏 UI，不要显示 0。
+ */
+export async function fetchAccountBalance(): Promise<AccountBalance | null> {
+    try {
+        const response = await fetch("/api/billing", { cache: "no-store", credentials: "include" });
+        if (!response.ok) return null;
+        const payload = (await response.json()) as { balance?: AccountBalance | null };
+        return payload.balance || null;
+    } catch {
+        return null;
+    }
+}
+
 export function formatUsd(value: number): string {
     return `$${value.toFixed(value < 1 ? 4 : 2)}`;
 }

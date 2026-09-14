@@ -38,6 +38,12 @@ export const config = {
     /** 运营后台接口的口令，用于建号、绑定 llmway 令牌。为空则后台接口整体关闭。 */
     adminToken: process.env.ADMIN_TOKEN || "",
 
+    /** 上游以多少个单位折合 1 美元记账。new-api 的 QuotaPerUnit，默认 500000。 */
+    quotaPerUnit: int("QUOTA_PER_UNIT", 500000),
+    /** 余额缓存时长。每次开画布都问一次上游没必要，也容易被上游限流挡住。 */
+    billingCacheMs: int("BILLING_CACHE_MS", 60 * 1000),
+    upstreamTimeoutMs: int("UPSTREAM_TIMEOUT_MS", 8000),
+
     /** 注册限流：同一 IP 在窗口内最多注册几次。 */
     registerWindowMs: int("REGISTER_WINDOW_MS", 60 * 60 * 1000),
     registerMaxPerWindow: int("REGISTER_MAX_PER_WINDOW", 5),

@@ -2,6 +2,7 @@ import { Alert, Button, Input, Modal, Progress, Segmented } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { fetchAccountBalance, formatUsd, type AccountBalance } from "@/services/api/billing";
 import { useUserStore } from "@/stores/use-user-store";
 
 type Mode = "login" | "register";
@@ -37,7 +38,7 @@ export function AccountModal({ open, onClose }: { open: boolean; onClose: () => 
     return (
         <Modal open={open} onCancel={onClose} footer={null} title={t("account.title")} width={420} destroyOnClose>
             {user ? (
-                <SignedIn onLogout={() => void logout().then(onClose)} username={user.username} activated={Boolean(channel)} quota={quota} />
+                <SignedIn open={open} onLogout={() => void logout().then(onClose)} username={user.username} activated={Boolean(channel)} quota={quota} />
             ) : (
                 <div className="mt-4 space-y-3">
                     {/* HTTP 下提交口令等于把密码交出去，这个提示必须常驻而不是只写在文档里 */}
@@ -74,9 +75,34 @@ export function AccountModal({ open, onClose }: { open: boolean; onClose: () => 
     );
 }
 
-function SignedIn({ username, activated, quota, onLogout }: { username: string; activated: boolean; quota: { usedBytes: number; limitBytes: number } | null; onLogout: () => void }) {
+function SignedIn({
+    open,
+    username,
+    activated,
+    quota,
+    onLogout,
+}: {
+    open: boolean;
+    username: string;
+    activated: boolean;
+    quota: { usedBytes: number; limitBytes: number } | null;
+    onLogout: () => void;
+}) {
     const { t } = useTranslation();
+    const [balance, setBalance] = useState<AccountBalance | null>(null);
     const percent = quota && quota.limitBytes > 0 ? Math.min(100, Math.round((quota.usedBytes / quota.limitBytes) * 100)) : 0;
+
+    // 每次打开弹窗都刷一次。后端有 60 秒缓存，连点也不会打到上游。
+    useEffect(() => {
+        if (!open) return;
+        let alive = true;
+        void fetchAccountBalance().then((result) => {
+            if (alive) setBalance(result);
+        });
+        return () => {
+            alive = false;
+        };
+    }, [open]);
 
     return (
         <div className="mt-4 space-y-4">
@@ -87,6 +113,19 @@ function SignedIn({ username, activated, quota, onLogout }: { username: string; 
 
             {/* 未开通的账号能登录、能用画布，但没有渠道，生成一定失败——必须说清为什么 */}
             <Alert type={activated ? "success" : "warning"} showIcon message={t(activated ? "account.activated" : "account.notActivated")} />
+
+            {/* 取不到就整块不显示。显示 0 会被当成余额真的用完了 */}
+            {balance ? (
+                <div className="rounded-lg border border-stone-200 px-3 py-2 dark:border-stone-800">
+                    <div className="flex items-baseline justify-between">
+                        <span className="text-xs text-stone-500">{t("account.balance")}</span>
+                        <span className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-500">{formatUsd(balance.remainingUsd)}</span>
+                    </div>
+                    <div className="mt-0.5 text-right text-xs text-stone-500 tabular-nums">
+                        {t("account.totalLabel")} {formatUsd(balance.totalUsd)} · {t("account.usedLabel")} {formatUsd(balance.usedUsd)}
+                    </div>
+                </div>
+            ) : null}
 
             {quota ? (
                 <div>

@@ -22,6 +22,16 @@ export type ChannelRow = {
     user_id: string;
     base_url: string;
     api_key: string;
+    /**
+     * 上游的「访问令牌」（new-api 的 users.access_token，PAT）。
+     *
+     * 和 api_key 是两套凭据：api_key（sk-）只能调 /v1/* 生成，查余额要走 billing 接口，
+     * 而那个接口受上游全局开关「显示令牌额度」控制，对无限额度令牌只会返回占位的 1 亿。
+     * PAT 走 /api/user/self，直接拿到账户的 quota / used_quota，绕开该开关。
+     *
+     * 权限上 PAT 只能读该用户自己的数据，不是管理员凭据。留空表示不查余额。
+     */
+    upstream_pat: string;
     updated_at: string;
 };
 
@@ -90,6 +100,15 @@ CREATE TABLE IF NOT EXISTS sync_objects (
 );
 `);
 
+// SQLite 没有 ADD COLUMN IF NOT EXISTS，先查表结构再决定加不加，让重复启动是安全的。
+function addColumnIfMissing(table: string, column: string, definition: string) {
+    const columns = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all();
+    if (columns.some((item) => item.name === column)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+addColumnIfMissing("user_channels", "upstream_pat", "TEXT NOT NULL DEFAULT ''");
+
 export const nowIso = () => new Date().toISOString();
 
 /* ---------- users ---------- */
@@ -130,9 +149,10 @@ export function listUsers() {
 /* ---------- channels ---------- */
 
 const getChannelStmt = db.query<ChannelRow, [string]>("SELECT * FROM user_channels WHERE user_id = ?");
-const upsertChannelStmt = db.query<never, [string, string, string, string]>(`
-    INSERT INTO user_channels (user_id, base_url, api_key, updated_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(user_id) DO UPDATE SET base_url = excluded.base_url, api_key = excluded.api_key, updated_at = excluded.updated_at
+const upsertChannelStmt = db.query<never, [string, string, string, string, string]>(`
+    INSERT INTO user_channels (user_id, base_url, api_key, upstream_pat, updated_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET base_url = excluded.base_url, api_key = excluded.api_key,
+        upstream_pat = excluded.upstream_pat, updated_at = excluded.updated_at
 `);
 const deleteChannelStmt = db.query<never, [string]>("DELETE FROM user_channels WHERE user_id = ?");
 
@@ -140,10 +160,10 @@ export function getChannel(userId: string) {
     return getChannelStmt.get(userId);
 }
 
-/** 绑定令牌即「开通」，同时把配额从未开通额度提到正式额度。 */
-export function bindChannel(userId: string, baseUrl: string, apiKey: string, limitBytes = config.quotaBytes) {
+/** 绑定令牌即「开通」，同时把配额从未开通额度提到正式额度。upstreamPat 可留空，只是查不了余额。 */
+export function bindChannel(userId: string, baseUrl: string, apiKey: string, upstreamPat = "", limitBytes = config.quotaBytes) {
     db.transaction(() => {
-        upsertChannelStmt.run(userId, baseUrl, apiKey, nowIso());
+        upsertChannelStmt.run(userId, baseUrl, apiKey, upstreamPat, nowIso());
         setQuotaLimitStmt.run(limitBytes, userId);
     })();
 }

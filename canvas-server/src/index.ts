@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 
 import { clientIp, hashPassword, issueSession, passwordProblem, rateLimited, requireAdmin, requireAuth, revokeSession, usernameProblem, verifyPassword, type AuthVars } from "./auth";
+import { fetchUpstreamBilling, invalidateBilling } from "./billing";
 import { config } from "./config";
 import { bindChannel, createUser, db, findUserById, findUserByUsername, getChannel, getQuota, getSyncObject, listUsers, purgeExpiredSessions, recordSyncObject, unbindChannel } from "./db";
 import { measureUserUsage, readUserFile, resolveUserPath, writeUserFile } from "./storage";
@@ -70,6 +71,16 @@ app.get("/api/auth/me", requireAuth, (c) => {
     return c.json(sessionView(user.id, user.username));
 });
 
+/* ============ 余额 ============ */
+
+/**
+ * 代查上游账户余额。未开通、没留 PAT、或上游不可达时返回 balance: null，
+ * 前端据此隐藏这块 UI —— 显示 0 会被当成余额真的用完了。
+ */
+app.get("/api/billing", requireAuth, async (c) => {
+    return c.json({ balance: await fetchUpstreamBilling(c.get("user").id) });
+});
+
 /* ============ 同步 ============ */
 
 app.get("/api/sync/file", requireAuth, async (c) => {
@@ -121,17 +132,20 @@ app.post("/api/admin/users/:id/channel", requireAdmin, async (c) => {
     const id = c.req.param("id");
     if (!findUserById(id)) return c.json({ error: "账号不存在" }, 404);
 
-    const body = await c.req.json<{ baseUrl?: string; apiKey?: string; limitBytes?: number }>().catch(() => null);
+    const body = await c.req.json<{ baseUrl?: string; apiKey?: string; accessToken?: string; limitBytes?: number }>().catch(() => null);
     const baseUrl = (body?.baseUrl || "").trim();
     const apiKey = (body?.apiKey || "").trim();
     if (!baseUrl || !apiKey) return c.json({ error: "baseUrl 和 apiKey 都不能为空" }, 400);
 
-    bindChannel(id, baseUrl, apiKey, body?.limitBytes && body.limitBytes > 0 ? body.limitBytes : config.quotaBytes);
-    return c.json({ ok: true, quota: quotaView(id) });
+    // accessToken 是上游的用户级访问令牌（PAT），只用来查余额，可以不给
+    bindChannel(id, baseUrl, apiKey, (body?.accessToken || "").trim(), body?.limitBytes && body.limitBytes > 0 ? body.limitBytes : config.quotaBytes);
+    invalidateBilling(id);
+    return c.json({ ok: true, quota: quotaView(id), balance: await fetchUpstreamBilling(id) });
 });
 
 app.delete("/api/admin/users/:id/channel", requireAdmin, (c) => {
     unbindChannel(c.req.param("id"));
+    invalidateBilling(c.req.param("id"));
     return c.json({ ok: true });
 });
 
