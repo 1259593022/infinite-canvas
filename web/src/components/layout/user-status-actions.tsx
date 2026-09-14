@@ -1,8 +1,11 @@
 import type { CSSProperties } from "react";
+import { useState } from "react";
 import { Tooltip } from "antd";
-import { BookOpen, Keyboard, Puzzle, Settings2 } from "lucide-react";
+import { BookOpen, Keyboard, Puzzle, Settings2, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { AccountModal } from "@/components/layout/account-modal";
+import { useUserStore } from "@/stores/use-user-store";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { GitHubLink } from "@/components/layout/github-link";
 import { VersionReleaseModal } from "@/components/layout/version-release-modal";
@@ -25,6 +28,9 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const [accountOpen, setAccountOpen] = useState(false);
+    const user = useUserStore((state) => state.user);
+    const activated = useUserStore((state) => Boolean(state.channel));
     const canvasTheme = canvasThemes[theme];
     const naturalIconClass = "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-stone-600 transition-colors hover:bg-black/5 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white [&_svg]:size-4";
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
@@ -63,6 +69,19 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                     <Keyboard className="size-4" />
                 </button>
             ) : null}
+            <Tooltip title={user ? user.username : t("account.open")} mouseEnterDelay={0.2}>
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => setAccountOpen(true)} aria-label={t("account.open")}>
+                    {user ? (
+                        // 已登录时显示首字母；未开通用琥珀色标出来，免得客户一路点到生成失败才知道
+                        <span className={cn("inline-flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-white", activated ? "bg-emerald-600" : "bg-amber-500")}>
+                            {user.username.slice(0, 1).toUpperCase()}
+                        </span>
+                    ) : (
+                        <UserRound className="size-4" />
+                    )}
+                </button>
+            </Tooltip>
+            <AccountModal open={accountOpen} onClose={() => setAccountOpen(false)} />
         </div>
     );
 }

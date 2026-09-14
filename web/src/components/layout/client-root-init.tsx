@@ -4,6 +4,8 @@ import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { useConfigStore } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
+import { useCloudSync } from "@/hooks/use-cloud-sync";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
@@ -13,13 +15,21 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const importChannelCredentials = useConfigStore((state) => state.importChannelCredentials);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const hydrateModelPricing = useConfigStore((state) => state.hydrateModelPricing);
+    const fetchMe = useUserStore((state) => state.fetchMe);
 
     usePromptSourceScheduler();
+    useCloudSync();
 
     // 启动时补一次定价，让老配置也能显示单价，不必让用户手动重拉模型。
     useEffect(() => {
         void hydrateModelPricing();
     }, [hydrateModelPricing]);
+
+    // 问一次服务端「我是谁」。已登录就顺带把渠道写进配置，客户不用碰 API Key。
+    // 后端没部署或不可达时静默失败，画布照常当本地工具用。
+    useEffect(() => {
+        void fetchMe();
+    }, [fetchMe]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;
