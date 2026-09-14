@@ -495,12 +495,25 @@ function ChannelBalance({ baseUrl, apiKey }: { baseUrl: string; apiKey: string }
     }, [baseUrl, apiKey]);
 
     if (!summary) return null;
+
+    // 令牌不限额时上游给不出剩余量，只显示真实的「已用」。
+    // 之前这里拿占位的 1 亿当总额度，界面上会出现 $99,999,997 这种数字。
+    if (summary.unlimited) {
+        return (
+            <div className="mt-1 truncate text-xs text-stone-500">
+                {t("config.channels.used")}
+                <span className="ml-1 font-medium tabular-nums text-emerald-600 dark:text-emerald-500">{formatUsd(summary.usedUsd)}</span>
+                <span className="ml-1 opacity-70">{t("config.channels.unlimited")}</span>
+            </div>
+        );
+    }
+
     return (
         <div className="mt-1 truncate text-xs text-stone-500">
             {t("config.channels.balance")}
-            <span className="ml-1 font-medium tabular-nums text-emerald-600 dark:text-emerald-500">{formatUsd(summary.remainingUsd)}</span>
+            <span className="ml-1 font-medium tabular-nums text-emerald-600 dark:text-emerald-500">{formatUsd(summary.remainingUsd ?? 0)}</span>
             <span className="ml-1 opacity-70">
-                / {formatUsd(summary.totalUsd)} · {t("config.channels.used")} {formatUsd(summary.usedUsd)}
+                / {formatUsd(summary.totalUsd ?? 0)} · {t("config.channels.used")} {formatUsd(summary.usedUsd)}
             </span>
         </div>
     );

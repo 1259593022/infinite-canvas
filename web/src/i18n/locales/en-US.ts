@@ -487,6 +487,7 @@ export default {
             missingUrl: "API endpoint not set",
             balance: "Balance",
             used: "used",
+            unlimited: "(token is uncapped; see the upstream account for balance)",
             keepOne: "Keep at least one provider",
             defaultName: "Default provider",
             newName: "New provider",

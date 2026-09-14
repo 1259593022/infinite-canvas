@@ -487,6 +487,7 @@ export default {
             missingUrl: "未填写接口地址",
             balance: "余额",
             used: "已用",
+            unlimited: "（该令牌不限额，余额见上游账户）",
             keepOne: "至少保留一个渠道",
             defaultName: "默认渠道",
             newName: "新渠道",
