@@ -1,0 +1,23 @@
+services:
+    canvas-server:
+        image: canvas-server:local
+        container_name: canvas-server
+        restart: unless-stopped
+        # 只绑回环：外部一律经 OpenResty 反代进来，服务本身不直接暴露。
+        # 也因此 X-Forwarded-For 是可信的（没人能绕过反代直连伪造）。
+        ports:
+            - "127.0.0.1:8080:8080"
+        volumes:
+            - ./data:/data
+        environment:
+            DATA_DIR: /data
+            PORT: "8080"
+            # 上了 HTTPS 之后必须改回 true。明文 HTTP 下 Secure cookie 发不出去，
+            # 所以内网联调阶段只能先关，生产环境绝不可保持这个值。
+            COOKIE_SECURE: "false"
+            # 运营后台口令。留空则 /api/admin/* 整体关闭，也就无法给账号绑定令牌。
+            ADMIN_TOKEN: "${CANVAS_ADMIN_TOKEN}"
+            # 已开通账号的容量；整机 86G 可用，1G/人约可支撑 80 个账号
+            QUOTA_BYTES: "1073741824"
+            # 未开通账号的容量，挡住开放注册带来的磁盘占用
+            PENDING_QUOTA_BYTES: "52428800"
