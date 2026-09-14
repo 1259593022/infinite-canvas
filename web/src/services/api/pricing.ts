@@ -11,8 +11,15 @@ import type { ModelCapability } from "@/stores/use-config-store";
 /** 同源反代路径，由画布站点的 nginx 转发到 https://llmway.ai/api/pricing */
 const PRICING_ENDPOINT = "/llmway/pricing";
 
-/** 该目录只描述 llmway 的模型。渠道指向别家时必须整体跳过，否则会显示错误的价格。 */
-const PRICING_HOSTS = ["llmway.ai", "www.llmway.ai"];
+/**
+ * 该目录只描述同源反代背后那个站点的模型。渠道指向别家时必须整体跳过，否则会显示错误的价格。
+ *
+ * 部署到自有域名时用 VITE_PRICING_HOSTS 覆盖（逗号分隔），不必改代码重新打包逻辑。
+ */
+const PRICING_HOSTS: string[] = String(import.meta.env.VITE_PRICING_HOSTS || "llmway.ai,www.llmway.ai")
+    .split(",")
+    .map((host: string) => host.trim().toLowerCase())
+    .filter(Boolean);
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -20,8 +27,12 @@ export type PricingEntry = {
     modelName: string;
     /** 1 = 按次计费（图片/视频/音频这类），0 = 按 token 计费（文本） */
     quotaType: 0 | 1;
-    /** 按次计费时的单价，美元 */
+    /** 上游给的基准单价（美元），未乘分组倍率 */
     modelPrice: number;
+    /** 实际单价 = 基准价 × 分组倍率。展示和费用预估都该用这个 */
+    unitPrice: number;
+    /** 该模型适用的分组倍率 */
+    groupRatio: number;
     modelRatio: number;
     groups: string[];
 };
@@ -34,7 +45,20 @@ type PricingPayload = {
         model_ratio?: number;
         enable_groups?: string[];
     }>;
+    /** 分组倍率表，如 {"生图分组":1,"codex plus":0.125}。客户实付 = 基准价 × 该倍率 */
+    group_ratio?: Record<string, number>;
 };
+
+/**
+ * 挑出该模型适用的分组倍率。
+ *
+ * 匿名请求 /api/pricing 拿到的 group_ratio 只含公开分组，模型可能还挂在别的私有分组上，
+ * 那些倍率这里看不到。倍率不一致时取最大值——宁可把成本报高，也不能让客户以为更便宜。
+ */
+function resolveGroupRatio(groups: string[], ratios: Record<string, number>): number {
+    const known = groups.map((group) => ratios[group]).filter((value): value is number => typeof value === "number" && value > 0);
+    return known.length ? Math.max(...known) : 1;
+}
 
 let cache: { at: number; entries: Map<string, PricingEntry> } | null = null;
 let inflight: Promise<Map<string, PricingEntry>> | null = null;
@@ -67,16 +91,22 @@ export async function fetchPricingCatalog(force = false): Promise<Map<string, Pr
             const response = await fetch(PRICING_ENDPOINT, { cache: "no-store" });
             if (!response.ok) return new Map<string, PricingEntry>();
             const payload = (await response.json()) as PricingPayload;
+            const ratios = payload.group_ratio && typeof payload.group_ratio === "object" ? payload.group_ratio : {};
             const entries = new Map<string, PricingEntry>();
             for (const item of payload.data || []) {
                 const modelName = (item.model_name || "").trim();
                 if (!modelName) continue;
+                const groups = Array.isArray(item.enable_groups) ? item.enable_groups : [];
+                const modelPrice = Number(item.model_price) || 0;
+                const groupRatio = resolveGroupRatio(groups, ratios);
                 entries.set(modelName, {
                     modelName,
                     quotaType: item.quota_type === 1 ? 1 : 0,
-                    modelPrice: Number(item.model_price) || 0,
+                    modelPrice,
+                    unitPrice: modelPrice * groupRatio,
+                    groupRatio,
                     modelRatio: Number(item.model_ratio) || 0,
-                    groups: Array.isArray(item.enable_groups) ? item.enable_groups : [],
+                    groups,
                 });
             }
             cache = { at: Date.now(), entries };

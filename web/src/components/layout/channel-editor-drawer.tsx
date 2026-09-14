@@ -25,6 +25,35 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
         if (open && channel) setDraft(channel);
     }, [open, channel]);
 
+    const draftBaseUrl = draft?.baseUrl || "";
+
+    // 打开抽屉、或把地址改成 llmway 之后自动补一次定价，省掉「必须先点拉取模型才有价格」这一步。
+    // catalog 有 5 分钟缓存且并发去重，所以逐字符输入也不会打爆接口。
+    useEffect(() => {
+        if (!open || !isPricingChannel(draftBaseUrl)) return;
+        let alive = true;
+        void fetchPricingCatalog().then((catalog) => {
+            if (!alive || !catalog.size) return;
+            setDraft((current) => {
+                // 地址在等待期间被改过就放弃，避免把 A 站的价格写到 B 站的渠道上
+                if (!current || current.baseUrl !== draftBaseUrl) return current;
+                let dirty = false;
+                const models = current.models.map((model) => {
+                    const entry = catalog.get(model.name);
+                    if (!entry) return model;
+                    const capability = refineCapability(model.name, entry, model.capability);
+                    if (model.price === entry.unitPrice && model.quotaType === entry.quotaType && model.capability === capability) return model;
+                    dirty = true;
+                    return { ...model, capability, price: entry.unitPrice, quotaType: entry.quotaType };
+                });
+                return dirty ? { ...current, models } : current;
+            });
+        });
+        return () => {
+            alive = false;
+        };
+    }, [open, draftBaseUrl]);
+
     if (!draft) return null;
 
     const patch = (value: Partial<ModelChannel>) => setDraft((current) => (current ? { ...current, ...value } : current));
@@ -46,7 +75,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
             base.map((model) => {
                 const entry = catalog.get(model.name);
                 if (!entry) return model;
-                return { ...model, capability: refineCapability(model.name, entry, model.capability), price: entry.modelPrice, quotaType: entry.quotaType };
+                return { ...model, capability: refineCapability(model.name, entry, model.capability), price: entry.unitPrice, quotaType: entry.quotaType };
             }),
         );
     };

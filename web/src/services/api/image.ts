@@ -927,7 +927,7 @@ export async function fetchChannelModelsDetailed(channel: ModelChannel): Promise
     return names.map((name) => {
         const entry = pricing.get(name);
         const capability = refineCapability(name, entry, guessCapability(name));
-        return entry ? { name, capability, price: entry.modelPrice, quotaType: entry.quotaType } : { name, capability };
+        return entry ? { name, capability, price: entry.unitPrice, quotaType: entry.quotaType } : { name, capability };
     });
 }
 

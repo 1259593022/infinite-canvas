@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
+import { fetchPricingCatalog, isPricingChannel, refineCapability } from "@/services/api/pricing";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -76,8 +77,14 @@ export type ChannelCredentialsImportResult = {
 
 export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+/**
+ * OpenAI 格式渠道的默认地址。
+ *
+ * 本分支面向自家中转站部署，默认就指向 llmway —— 指向 api.openai.com 的话定价、余额、
+ * 能力修正这几项的域名守卫全都不命中，界面上和没做过一样。别处部署用 VITE_DEFAULT_BASE_URL 覆盖。
+ */
+const OPENAI_BASE_URL: string = String(import.meta.env.VITE_DEFAULT_BASE_URL || "https://llmway.ai");
 export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
 export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
 
@@ -148,6 +155,7 @@ type ConfigStore = {
     openConfigDialog: (shouldPromptContinue?: boolean, tab?: ConfigTabKey) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
     clearPromptContinue: () => void;
+    hydrateModelPricing: () => Promise<void>;
 };
 
 const VIDEO_KEYWORDS = ["video", "sora", "veo", "kling", "wan", "hailuo"];
@@ -245,6 +253,36 @@ export const useConfigStore = create<ConfigStore>()(
             openConfigDialog: (shouldPromptContinue = false, configTab = "channels") => set({ isConfigOpen: true, shouldPromptContinue, configTab }),
             setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
             clearPromptContinue: () => set({ shouldPromptContinue: false }),
+            /**
+             * 给已保存的渠道补上单价与计费方式。
+             *
+             * 定价只在「拉取模型」时写入，可老用户的 localStorage 里早就存着没有 price 的渠道，
+             * 不主动补的话他们永远看不到价格。启动时跑一次，取不到就原样不动。
+             */
+            hydrateModelPricing: async () => {
+                if (!get().config.channels.some((channel) => isPricingChannel(channel.baseUrl))) return;
+                const catalog = await fetchPricingCatalog();
+                if (!catalog.size) return;
+                set((state) => {
+                    let dirty = false;
+                    const channels = state.config.channels.map((channel) => {
+                        if (!isPricingChannel(channel.baseUrl)) return channel;
+                        let channelDirty = false;
+                        const models = channel.models.map((model) => {
+                            const entry = catalog.get(model.name);
+                            if (!entry) return model;
+                            const capability = refineCapability(model.name, entry, model.capability);
+                            if (model.price === entry.unitPrice && model.quotaType === entry.quotaType && model.capability === capability) return model;
+                            channelDirty = true;
+                            return { ...model, capability, price: entry.unitPrice, quotaType: entry.quotaType };
+                        });
+                        if (!channelDirty) return channel;
+                        dirty = true;
+                        return { ...channel, models };
+                    });
+                    return dirty ? { config: { ...state.config, channels } } : state;
+                });
+            },
         }),
         {
             name: CONFIG_STORE_KEY,
@@ -305,7 +343,11 @@ export function normalizeChannelModels(models: Array<string | ChannelModel> | un
         seen.add(name);
         const capability = typeof item === "string" ? guessCapability(name) : item.capability || guessCapability(name);
         const script = typeof item === "string" ? undefined : item.script?.trim() || undefined;
-        result.push({ name, capability, script });
+        // price / quotaType 必须原样带过去。这个函数同时跑在「保存渠道」和「持久化回填」两条路上，
+        // 丢字段的话刚拉到的定价会被立刻抹掉，界面上永远看不到价格。
+        const price = typeof item === "string" ? undefined : item.price;
+        const quotaType = typeof item === "string" ? undefined : item.quotaType;
+        result.push({ name, capability, script, price, quotaType });
     }
     return result;
 }

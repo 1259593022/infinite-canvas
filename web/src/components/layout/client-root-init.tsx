@@ -12,8 +12,14 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const handledConfigParams = useRef(false);
     const importChannelCredentials = useConfigStore((state) => state.importChannelCredentials);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const hydrateModelPricing = useConfigStore((state) => state.hydrateModelPricing);
 
     usePromptSourceScheduler();
+
+    // 启动时补一次定价，让老配置也能显示单价，不必让用户手动重拉模型。
+    useEffect(() => {
+        void hydrateModelPricing();
+    }, [hydrateModelPricing]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;
