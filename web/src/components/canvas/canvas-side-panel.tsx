@@ -20,11 +20,12 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
 
 import type { InsertAssetPayload } from "./asset-picker-modal";
+import { CanvasLibraryTab } from "@/components/library/canvas-library-tab";
 
 const PANEL_MOTION_SECONDS = CANVAS_SIDE_PANEL_MOTION_MS / 1000;
 const PANEL_EASE = [0.22, 1, 0.36, 1] as const;
 
-type PanelTab = "canvas" | "assets" | "prompts";
+type PanelTab = "canvas" | "assets" | "prompts" | "library";
 
 type Props = {
     nodes: CanvasNodeData[];
@@ -103,14 +104,17 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                     <TabButton label={t("canvas.sidePanel.canvas")} active={tab === "canvas"} theme={theme} onClick={() => setTab("canvas")} />
                     <TabButton label={t("canvas.sidePanel.assets")} active={tab === "assets"} theme={theme} onClick={() => setTab("assets")} />
                     <TabButton label={t("canvas.sidePanel.prompts")} active={tab === "prompts"} theme={theme} onClick={() => setTab("prompts")} />
+                    <TabButton label={t("canvas.sidePanel.library")} active={tab === "library"} theme={theme} onClick={() => setTab("library")} />
                 </div>
                 <div className="mt-2 min-h-0 flex-1 overflow-hidden">
                     {tab === "canvas" ? (
                         <CanvasNodesTab nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={onFocusNode} onPreviewNode={onPreviewNode} theme={theme} />
                     ) : tab === "assets" ? (
                         <CanvasAssetsTab onInsert={onInsertAsset} theme={theme} />
-                    ) : (
+                    ) : tab === "prompts" ? (
                         <CanvasPromptsTab onInsert={onInsertAsset} theme={theme} />
+                    ) : (
+                        <CanvasLibraryTab onInsert={onInsertAsset} />
                     )}
                 </div>
                 <button type="button" className="absolute inset-y-0 right-0 z-40 w-4 translate-x-1/2 cursor-col-resize" onPointerDown={startResize} aria-label={t("canvas.sidePanel.resize")} />
