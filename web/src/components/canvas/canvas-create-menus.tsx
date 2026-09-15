@@ -3,9 +3,9 @@ import { ImageIcon, List, Music2, Settings2, Video, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { useThemeStore } from "@/stores/use-theme-store";
 import { listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
 import { CanvasNodeType, type ConnectionHandle, type Position } from "@/types/canvas";
+import { useCanvasTheme } from "@/hooks/use-canvas-theme";
 
 export type PendingConnectionCreate = {
     connection: ConnectionHandle;
@@ -21,7 +21,7 @@ export function ConnectionCreateMenu({
     onCreate: (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio) => void;
     onClose: () => void;
 }) {
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const theme = useCanvasTheme();
     const { t } = useTranslation();
     return (
         <div
@@ -76,7 +76,7 @@ export function ConnectionCreateOption({ theme, icon, title, description, onClic
 }
 
 export function NodeCreateMenu({ position, onCreate, onClose }: { position: Position; onCreate: (type: string) => void; onClose: () => void }) {
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const theme = useCanvasTheme();
     const { t } = useTranslation();
     useNodeRegistryVersion();
     const menuRef = useRef<HTMLDivElement>(null);

@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
 import { CircleDot, Eraser, Grid2x2, Group, Hand, Image as ImageIcon, Info, LayoutGrid, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 
-import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
+import { buildCanvasTheme, CANVAS_HUE_PRESETS, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
 import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { useTranslation } from "react-i18next";
+import { useCanvasTheme } from "@/hooks/use-canvas-theme";
 
 export function CanvasToolbar({
     selectedCount,
@@ -61,7 +62,12 @@ export function CanvasToolbar({
     const rootRef = useRef<HTMLDivElement>(null);
     const colorTheme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
-    const theme = canvasThemes[colorTheme];
+    const canvasHue = useThemeStore((state) => state.canvasHue);
+    const canvasTint = useThemeStore((state) => state.canvasTint);
+    const setCanvasHue = useThemeStore((state) => state.setCanvasHue);
+    const setCanvasTint = useThemeStore((state) => state.setCanvasTint);
+    const resetCanvasColor = useThemeStore((state) => state.resetCanvasColor);
+    const theme = useCanvasTheme();
     const [hovered, setHovered] = useState<string | null>(null);
     const [tipX, setTipX] = useState(0);
     const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -227,6 +233,63 @@ export function CanvasToolbar({
                             {t("canvas.toolbar.dark")}
                         </CanvasThemeButton>
                     </div>
+                    <div className="mt-3 flex items-center justify-between px-1 pb-1.5">
+                        <span className="text-[11px] font-medium opacity-50">{t("canvas.toolbar.colorTone")}</span>
+                        {canvasTint > 0 ? (
+                            <button type="button" className="text-[11px] underline-offset-2 opacity-60 transition hover:opacity-100 hover:underline" onClick={resetCanvasColor}>
+                                {t("canvas.toolbar.resetTone")}
+                            </button>
+                        ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-1 px-1">
+                        {CANVAS_HUE_PRESETS.map((preset) => {
+                            // 色块按当前深浅模式取样，所见即所得
+                            const swatch = buildCanvasTheme(colorTheme, preset, 1).canvas.background;
+                            const active = canvasTint > 0 && Math.abs(canvasHue - preset) < 1;
+                            return (
+                                <button
+                                    key={preset}
+                                    type="button"
+                                    aria-label={`${preset}°`}
+                                    className="size-6 rounded-full border transition hover:scale-110"
+                                    style={{ background: swatch, borderColor: active ? theme.node.activeStroke : theme.toolbar.border, borderWidth: active ? 2 : 1 }}
+                                    onClick={() => {
+                                        setCanvasHue(preset);
+                                        // 从「不染色」点色块时给一个看得见的默认浓度，否则点了没反应
+                                        if (canvasTint <= 0) setCanvasTint(0.55);
+                                    }}
+                                />
+                            );
+                        })}
+                    </div>
+                    <div className="mt-2 px-1">
+                        <input
+                            type="range"
+                            min={0}
+                            max={359}
+                            value={canvasHue}
+                            onChange={(event) => {
+                                setCanvasHue(Number(event.target.value));
+                                if (canvasTint <= 0) setCanvasTint(0.55);
+                            }}
+                            className="h-1.5 w-full cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+                            style={{ background: "linear-gradient(to right,#f87171,#fbbf24,#a3e635,#34d399,#22d3ee,#60a5fa,#a78bfa,#f472b6,#f87171)" }}
+                            aria-label={t("canvas.toolbar.hue")}
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                            <span className="shrink-0 text-[11px] opacity-50">{t("canvas.toolbar.tint")}</span>
+                            <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                value={Math.round(canvasTint * 100)}
+                                onChange={(event) => setCanvasTint(Number(event.target.value) / 100)}
+                                className="h-1.5 w-full cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+                                style={{ background: `linear-gradient(to right, ${theme.toolbar.itemHover}, ${buildCanvasTheme(colorTheme, canvasHue, 1).node.fill})` }}
+                                aria-label={t("canvas.toolbar.tint")}
+                            />
+                        </div>
+                    </div>
                     <div className="mt-3 px-1 pb-1.5 text-[11px] font-medium opacity-50">{t("canvas.toolbar.gridStyle")}</div>
                     <Segmented
                         className="w-full !p-1 [&_.ant-segmented-group]:!flex [&_.ant-segmented-item]:!min-h-8 [&_.ant-segmented-item]:!flex-1 [&_.ant-segmented-item-label]:!min-h-8 [&_.ant-segmented-item-label]:!leading-8"
@@ -302,7 +365,7 @@ function ToolbarButton({
     danger?: boolean;
     children: ReactNode;
 }) {
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const theme = useCanvasTheme();
 
     return (
         <Button
@@ -327,7 +390,7 @@ function Divider({ theme }: { theme: CanvasTheme }) {
 }
 
 function CanvasThemeButton({ colorTheme, targetTheme, onThemeChange, children }: { colorTheme: CanvasColorTheme; targetTheme: CanvasColorTheme; onThemeChange: (theme: CanvasColorTheme) => void; children: ReactNode }) {
-    const theme = canvasThemes[colorTheme];
+    const theme = useCanvasTheme();
     const active = colorTheme === targetTheme;
     const activeStyle = colorTheme === "light" ? { background: "#111111", color: "#ffffff" } : { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
     const { t } = useTranslation();

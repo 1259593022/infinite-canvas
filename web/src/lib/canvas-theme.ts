@@ -1,7 +1,17 @@
 export type CanvasColorTheme = "light" | "dark";
 export type CanvasBackgroundMode = "dots" | "lines" | "blank";
 
-export const canvasThemes = {
+/**
+ * 显式写成 string 而不是从 as const 推字面量。
+ * 主题色值会按用户选的色相实时派生，字面量类型赋不回去。
+ */
+export type CanvasTheme = {
+    canvas: { background: string; dot: string; line: string; selectionStroke: string; selectionFill: string };
+    node: { label: string; fill: string; panel: string; stroke: string; activeStroke: string; placeholder: string; text: string; muted: string; faint: string };
+    toolbar: { panel: string; border: string; item: string; itemHover: string; activeBg: string; activeText: string };
+};
+
+export const canvasThemes: Record<CanvasColorTheme, CanvasTheme> = {
     light: {
         canvas: {
             background: "#f4f2ed",
@@ -58,6 +68,100 @@ export const canvasThemes = {
             activeText: "#f5f5f4",
         },
     },
-} as const;
+};
 
-export type CanvasTheme = (typeof canvasThemes)[CanvasColorTheme];
+/* ==================== 色相派生 ==================== */
+
+/** 内置主题的色相，也是「恢复默认」的落点（暖灰 stone 系）。 */
+export const DEFAULT_CANVAS_HUE = 40;
+
+/** 浓度拉满时给饱和度加多少。再高文字就开始显脏了。 */
+const MAX_SATURATION_ADD = 0.18;
+
+/** 预设色相，外观面板上那排色块。 */
+export const CANVAS_HUE_PRESETS = [0, 40, 80, 150, 190, 220, 265, 320];
+
+type Rgba = { r: number; g: number; b: number; a: number | null };
+
+/** 主题里只用到 #rrggbb 和 rgba() 两种写法。 */
+function parseColor(value: string): Rgba | null {
+    const hex = value.trim().match(/^#([0-9a-f]{6})$/i);
+    if (hex) {
+        const n = parseInt(hex[1], 16);
+        return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: null };
+    }
+    const rgba = value.trim().match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]*)\s*)?\)$/i);
+    if (!rgba) return null;
+    return { r: Number(rgba[1]), g: Number(rgba[2]), b: Number(rgba[3]), a: rgba[4] === undefined || rgba[4] === "" ? null : Number(rgba[4]) };
+}
+
+function rgbToHsl(r: number, g: number, b: number) {
+    const rn = r / 255;
+    const gn = g / 255;
+    const bn = b / 255;
+    const max = Math.max(rn, gn, bn);
+    const min = Math.min(rn, gn, bn);
+    const l = (max + min) / 2;
+    const d = max - min;
+    if (d === 0) return { h: 0, s: 0, l };
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    const h = max === rn ? ((gn - bn) / d + (gn < bn ? 6 : 0)) : max === gn ? (bn - rn) / d + 2 : (rn - gn) / d + 4;
+    return { h: h * 60, s, l };
+}
+
+function hslToRgb(h: number, s: number, l: number) {
+    if (s === 0) {
+        const v = Math.round(l * 255);
+        return { r: v, g: v, b: v };
+    }
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const hk = (((h % 360) + 360) % 360) / 360;
+    const channel = (t: number) => {
+        let value = t;
+        if (value < 0) value += 1;
+        if (value > 1) value -= 1;
+        if (value < 1 / 6) return p + (q - p) * 6 * value;
+        if (value < 1 / 2) return q;
+        if (value < 2 / 3) return p + (q - p) * (2 / 3 - value) * 6;
+        return p;
+    };
+    return { r: Math.round(channel(hk + 1 / 3) * 255), g: Math.round(channel(hk) * 255), b: Math.round(channel(hk - 1 / 3) * 255) };
+}
+
+/**
+ * 换色相、调饱和度，**亮度一律不动**。
+ *
+ * 亮度承载了全部对比度，只要不碰它，文字和背景的明暗关系就恒定，
+ * 无论色相怎么拖都不会配出看不清的组合。
+ *
+ * 饱和度用加法而不是乘法：内置主题里像 #fafaf9 这种饱和度几乎为 0，
+ * 乘法永远染不上色。
+ */
+function shiftColor(value: string, hue: number, tint: number): string {
+    // tint 为 0 时直接原样返回，保证默认状态逐字等于内置主题
+    if (tint <= 0) return value;
+    const rgba = parseColor(value);
+    if (!rgba) return value;
+
+    const { s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b);
+    const nextS = Math.min(1, Math.max(0, s + tint * MAX_SATURATION_ADD));
+    const { r, g, b } = hslToRgb(hue, nextS, l);
+
+    if (rgba.a === null) return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+    // 保留原来的 alpha 写法（.28 这种简写照原样输出，避免无谓的视觉差异）
+    const alpha = String(rgba.a).replace(/^0(?=\.)/, "");
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** 按色相和浓度派生整套主题。tint=0 时返回的就是内置主题本身。 */
+export function buildCanvasTheme(mode: CanvasColorTheme, hue: number = DEFAULT_CANVAS_HUE, tint: number = 0): CanvasTheme {
+    const base = canvasThemes[mode];
+    if (tint <= 0) return base;
+    const map = (group: Record<string, string>) => Object.fromEntries(Object.entries(group).map(([key, value]) => [key, shiftColor(value, hue, tint)]));
+    return {
+        canvas: map(base.canvas) as CanvasTheme["canvas"],
+        node: map(base.node) as CanvasTheme["node"],
+        toolbar: map(base.toolbar) as CanvasTheme["toolbar"],
+    };
+}

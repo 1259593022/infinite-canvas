@@ -12,9 +12,9 @@ import { VersionReleaseModal } from "@/components/layout/version-release-modal";
 import { DOCS_URL } from "@/constant/env";
 import { changeAppLocale, type AppLocale } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { canvasThemes } from "@/lib/canvas-theme";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useCanvasTheme } from "@/hooks/use-canvas-theme";
 
 type UserStatusActionsProps = {
     showConfig?: boolean;
@@ -31,7 +31,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const [accountOpen, setAccountOpen] = useState(false);
     const user = useUserStore((state) => state.user);
     const activated = useUserStore((state) => Boolean(state.channel));
-    const canvasTheme = canvasThemes[theme];
+    const canvasTheme = useCanvasTheme();
     const naturalIconClass = "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-stone-600 transition-colors hover:bg-black/5 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white [&_svg]:size-4";
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
     const versionStyle = iconStyle;

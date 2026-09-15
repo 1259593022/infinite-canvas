@@ -1,11 +1,11 @@
 import { memo, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { App, Empty, Input, Popconfirm, Select, Spin, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Music2, Plus, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
+import { BookOpen, Check, ChevronRight, Download, Eye, FileText, Image as ImageIcon, ListChecks, Music2, PanelLeftClose, Plus, Search, Settings2, Square, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 
-import { canvasThemes, type CanvasTheme } from "@/lib/canvas-theme";
+import { type CanvasTheme } from "@/lib/canvas-theme";
 import { exportCanvasNodes } from "@/lib/canvas/canvas-export";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { cn } from "@/lib/utils";
@@ -16,11 +16,11 @@ import { uploadImage } from "@/services/image-storage";
 import { useAssetStore, type Asset, type AssetKind } from "@/stores/use-asset-store";
 import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
 import { CANVAS_SIDE_PANEL_MAX_WIDTH, CANVAS_SIDE_PANEL_MIN_WIDTH, CANVAS_SIDE_PANEL_MOTION_MS, useCanvasSidePanelStore } from "@/stores/use-canvas-side-panel-store";
-import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
 
 import type { InsertAssetPayload } from "./asset-picker-modal";
 import { CanvasLibraryTab } from "@/components/library/canvas-library-tab";
+import { useCanvasTheme } from "@/hooks/use-canvas-theme";
 
 const PANEL_MOTION_SECONDS = CANVAS_SIDE_PANEL_MOTION_MS / 1000;
 const PANEL_EASE = [0.22, 1, 0.36, 1] as const;
@@ -53,13 +53,14 @@ const STATUS_COLOR: Record<string, string> = {
 
 export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, onInsertAsset }: Props) {
     const { t } = useTranslation();
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const theme = useCanvasTheme();
     const [tab, setTab] = useState<PanelTab>("canvas");
     const width = useCanvasSidePanelStore((state) => state.width);
     const panelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
     const panelMounted = useCanvasSidePanelStore((state) => state.panelMounted);
     const panelClosing = useCanvasSidePanelStore((state) => state.panelClosing);
     const setWidth = useCanvasSidePanelStore((state) => state.setWidth);
+    const closePanel = useCanvasSidePanelStore((state) => state.closePanel);
     const [resizing, setResizing] = useState(false);
 
     const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -100,11 +101,25 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                 style={{ width, background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
                 data-canvas-no-zoom
             >
-                <div className="flex items-center gap-5 px-4 pt-3.5">
-                    <TabButton label={t("canvas.sidePanel.canvas")} active={tab === "canvas"} theme={theme} onClick={() => setTab("canvas")} />
-                    <TabButton label={t("canvas.sidePanel.assets")} active={tab === "assets"} theme={theme} onClick={() => setTab("assets")} />
-                    <TabButton label={t("canvas.sidePanel.prompts")} active={tab === "prompts"} theme={theme} onClick={() => setTab("prompts")} />
-                    <TabButton label={t("canvas.sidePanel.library")} active={tab === "library"} theme={theme} onClick={() => setTab("library")} />
+                <div className="flex items-center gap-4 pl-4 pr-2 pt-3.5">
+                    {/* 面板最窄 220px 时四个中文标签会挤，允许横向滚动而不是换行把按钮顶掉 */}
+                    <div className="hide-scrollbar flex min-w-0 flex-1 items-center gap-4 overflow-x-auto">
+                        <TabButton label={t("canvas.sidePanel.canvas")} active={tab === "canvas"} theme={theme} onClick={() => setTab("canvas")} />
+                        <TabButton label={t("canvas.sidePanel.assets")} active={tab === "assets"} theme={theme} onClick={() => setTab("assets")} />
+                        <TabButton label={t("canvas.sidePanel.prompts")} active={tab === "prompts"} theme={theme} onClick={() => setTab("prompts")} />
+                        <TabButton label={t("canvas.sidePanel.library")} active={tab === "library"} theme={theme} onClick={() => setTab("library")} />
+                    </div>
+                    {/* 收起入口放在面板自己身上，比藏在画布左上角好找。展开入口仍在顶栏 */}
+                    <button
+                        type="button"
+                        onClick={closePanel}
+                        aria-label={t("canvas.collapsePanel")}
+                        title={t("canvas.collapsePanel")}
+                        className="grid size-7 shrink-0 place-items-center rounded-md transition hover:bg-black/5 dark:hover:bg-white/10"
+                        style={{ color: theme.toolbar.item }}
+                    >
+                        <PanelLeftClose className="size-4" />
+                    </button>
                 </div>
                 <div className="mt-2 min-h-0 flex-1 overflow-hidden">
                     {tab === "canvas" ? (
