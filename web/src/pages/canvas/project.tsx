@@ -50,6 +50,7 @@ import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNod
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, createCanvasNode, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
 import { applyGroupSelection, applyUngroupSelection, canGroupSelectedNodes, canUngroupSelectedNodes, collectGroupMemberNodes, findContainingGroupId, findGroupDropTarget, getConnectionTargetAnchor, getGroupWrapRect, normalizeConnection, snapNodesIntoGroup } from "@/lib/canvas/canvas-node-geometry";
+import { tidyNodes } from "@/lib/canvas/canvas-layout";
 import {
     audioExtension,
     buildAngleLabel,
@@ -1169,6 +1170,15 @@ function InfiniteCanvasPage() {
         }
     }, [message, projectId, t]);
 
+    /**
+     * 一键整理。撤销不用另外接——节点变化会被 effect 自动记进历史。
+     * 选中超过一个就只整理选中的，否则整理全部；tidyNodes 返回 null 表示无需改动。
+     */
+    const handleTidy = useCallback(() => {
+        const next = tidyNodes(nodesRef.current, connectionsRef.current, selectedNodeIdsRef.current);
+        if (next) setNodes(next);
+    }, []);
+
     const handleCanvasMouseDown = useCallback(
         (event: ReactPointerEvent<HTMLDivElement>) => {
             setContextMenu(null);
@@ -1177,7 +1187,9 @@ function InfiniteCanvasPage() {
             setToolbarNodeId(null);
             setDialogNodeId(null);
             if (pendingConnectionCreateRef.current) cancelPendingConnectionCreate();
-            if (event.button !== 0) return;
+            // 左键和中键都可能发起框选——具体哪个取决于当前工具模式，
+            // 由 InfiniteCanvas 的 shouldMarquee 判定后才调到这里。
+            if (event.button !== 0 && event.button !== 1) return;
 
             const world = screenToCanvas(event.clientX, event.clientY);
             const nextSelectionBox = {
@@ -3281,6 +3293,7 @@ function InfiniteCanvasPage() {
                     onAddText={() => createNode(CanvasNodeType.Text)}
                     onAddConfig={() => createNode(CanvasNodeType.Config)}
                     onAddGroup={() => createNode(CanvasNodeType.Group)}
+                    onTidy={handleTidy}
                     onAddExtensionNode={(type) => createNode(type)}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
