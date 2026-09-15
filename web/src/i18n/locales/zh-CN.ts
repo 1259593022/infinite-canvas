@@ -253,7 +253,7 @@ export default {
         openAgent: "打开本地 Codex 面板",
         nodeTypes: { image: "图片", text: "文本", config: "生成配置", video: "视频", audio: "音频", group: "组" },
         toolbar: {
-            select: "选择模式（左键拖节点 · 拖空白框选 · 中键移动画布）", pan: "移动模式（左键拖哪都移动画布 · 中键框选 · 摆节点请切到选择模式）", tidy: "一键整理（选中则只整理选中的）", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", extensions: "扩展节点", upload: "上传资产", appearance: "画布外观", clear: "清空画布",
+            select: "选择模式（左键拖节点=移动节点 · 拖空白仍是移动画布 · 中键框选）", pan: "移动模式（左键拖哪都移动画布 · 中键框选 · 摆节点请切到选择模式）", tidy: "一键整理（选中则只整理选中的）", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", extensions: "扩展节点", upload: "上传资产", appearance: "画布外观", clear: "清空画布",
             colorTone: "色调", hue: "色相", tint: "浓度", resetTone: "恢复默认", themeMode: "主题模式", light: "浅色", dark: "深色", gridStyle: "网格样式", dots: "点", lines: "线", blank: "空白", imageInfo: "图片信息",
         },
         project: {

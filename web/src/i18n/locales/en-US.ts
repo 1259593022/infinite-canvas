@@ -253,7 +253,7 @@ export default {
         openAgent: "Open local Codex panel",
         nodeTypes: { image: "Image", text: "Text", config: "Generation config", video: "Video", audio: "Audio", group: "Group" },
         toolbar: {
-            select: "Select mode (left: drag nodes · drag empty space to marquee · middle: pan)", pan: "Hand mode (left: pan anywhere · middle: marquee · switch to Select to move nodes)", tidy: "Tidy up (only the selection, if any)", text: "Text", image: "Image", video: "Video", audio: "Audio", config: "Generation config", group: "Group", extensions: "Extension nodes", upload: "Upload assets", appearance: "Canvas appearance", clear: "Clear canvas",
+            select: "Select mode (left on a node: move it · left on empty space still pans · middle: marquee)", pan: "Hand mode (left: pan anywhere · middle: marquee · switch to Select to move nodes)", tidy: "Tidy up (only the selection, if any)", text: "Text", image: "Image", video: "Video", audio: "Audio", config: "Generation config", group: "Group", extensions: "Extension nodes", upload: "Upload assets", appearance: "Canvas appearance", clear: "Clear canvas",
             colorTone: "Color tone", hue: "Hue", tint: "Intensity", resetTone: "Reset", themeMode: "Theme", light: "Light", dark: "Dark", gridStyle: "Grid style", dots: "Dots", lines: "Lines", blank: "Blank", imageInfo: "Image info",
         },
         project: {

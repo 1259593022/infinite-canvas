@@ -122,17 +122,18 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const isLeft = event.button === 0;
         if (!isMiddle && !isLeft) return;
 
-        // 中键永远做和左键相反的事：移动模式下框选、选择模式下平移。
-        // 这样平移和框选始终同时可用，不必为了框一下就去切工具模式——而移动的频率
-        // 远高于框选，所以更顺手的那个键（左键）留给移动。
-        const wantsMarquee = isMiddle ? activeTool === "pan" : activeTool === "select";
-
-        // 框选只能从空白处起手，从节点上起拖会和节点自身的指针处理打架。
-        const shouldMarquee = wantsMarquee && isBackgroundClick;
-        // 移动模式是真正的抓手工具：左键拖哪里都平移，包括节点上。
-        // 之前要求必须点在空白处，导致光标明明是抓手、一拖却在移动节点——光标在骗人。
-        // 要摆节点请切到选择模式（工具栏第一个按钮）。
-        const shouldPan = !shouldMarquee && (isMiddle || activeTool === "pan");
+        // 按键分工固定，**不随工具模式变**：
+        //   左键拖空白 → 永远平移画布（最高频的操作，给最顺手的键）
+        //   中键拖空白 → 永远框选
+        //   中键拖节点 → 平移（光标压在节点上也能随手拖动画布）
+        //
+        // 之前左键的行为取决于工具模式，而模式只体现为工具栏里一个小图标，
+        // 手滑点一下就变成「左键拖不动画布」，用户很难自己定位到原因。
+        //
+        // 工具模式现在只管一件事：左键**在节点上**拖动时，是移动节点还是平移画布。
+        // 空格 / Ctrl 临时反转这一项，相当于不切模式也能临时换手。
+        const shouldMarquee = isMiddle && isBackgroundClick;
+        const shouldPan = !shouldMarquee && (isMiddle || isBackgroundClick || activeTool === "pan");
 
         // 节点的拖拽走 onMouseDown，而这里是 onPointerDown——pointerdown 先触发，
         // 节点里的 stopPropagation 拦不住它。所以要显式告诉上层「这一下是平移」，
