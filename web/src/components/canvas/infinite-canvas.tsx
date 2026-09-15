@@ -11,6 +11,8 @@ type InfiniteCanvasProps = {
     backgroundMode?: CanvasBackgroundMode;
     onViewportChange: (viewport: ViewportTransform) => void;
     onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+    /** 每次按下都会调用，告诉上层这一下是不是平移手势——节点据此让路，避免和画布一起动。 */
+    onPanGesture?: (panning: boolean) => void;
     onCanvasDeselect?: () => void;
     onCanvasDoubleClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
     onContextMenu?: (event: React.MouseEvent) => void;
@@ -18,7 +20,7 @@ type InfiniteCanvasProps = {
     children: React.ReactNode;
 };
 
-export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = "lines", onViewportChange, onCanvasMouseDown, onCanvasDeselect, onCanvasDoubleClick, onContextMenu, onDrop, children }: InfiniteCanvasProps) {
+export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = "lines", onViewportChange, onCanvasMouseDown, onPanGesture, onCanvasDeselect, onCanvasDoubleClick, onContextMenu, onDrop, children }: InfiniteCanvasProps) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const panState = useRef({
         isPanning: false,
@@ -107,6 +109,8 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
     };
 
     const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        // 先清掉上一次手势的标记，免得提前 return 的分支把它留成 true
+        onPanGesture?.(false);
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("[data-canvas-no-zoom]")) return;
         if (target?.closest("[data-connection-create-menu]")) return;
@@ -124,13 +128,23 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const wantsMarquee = isMiddle ? activeTool === "pan" : activeTool === "select";
 
         // 框选只能从空白处起手，从节点上起拖会和节点自身的指针处理打架。
-        // 中键落在节点上时退回平移：「光标停在节点上也能平移画布」是原有的便利，不能丢。
         const shouldMarquee = wantsMarquee && isBackgroundClick;
-        const shouldPan = !shouldMarquee && (isMiddle || isBackgroundClick);
+        // 移动模式是真正的抓手工具：左键拖哪里都平移，包括节点上。
+        // 之前要求必须点在空白处，导致光标明明是抓手、一拖却在移动节点——光标在骗人。
+        // 要摆节点请切到选择模式（工具栏第一个按钮）。
+        const shouldPan = !shouldMarquee && (isMiddle || activeTool === "pan");
+
+        // 节点的拖拽走 onMouseDown，而这里是 onPointerDown——pointerdown 先触发，
+        // 节点里的 stopPropagation 拦不住它。所以要显式告诉上层「这一下是平移」，
+        // 否则节点会跟着画布一起动。
+        onPanGesture?.(shouldPan);
 
         if (shouldPan) {
             event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
+            // 只在空白处起手时抓指针。从节点上起手也抓的话，后续的 mousedown 会被重定向到
+            // 容器，节点收不到，就变成「移动模式下点节点选不中」。
+            // 平移本身不依赖 capture —— pointermove / pointerup 都挂在 window 上。
+            if (isBackgroundClick) event.currentTarget.setPointerCapture(event.pointerId);
             panState.current = {
                 isPanning: true,
                 startX: event.clientX,
