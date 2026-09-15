@@ -1,6 +1,4 @@
-import { articAdapter } from "./adapters/artic";
 import { metAdapter } from "./adapters/met";
-import { nasaAdapter } from "./adapters/nasa";
 import { openverseAdapter } from "./adapters/openverse";
 import { polyhavenAdapter } from "./adapters/polyhaven";
 import type { ImageSourceAdapter, LibraryImage } from "./types";
@@ -9,9 +7,16 @@ export type { ImageSourceAdapter, LibraryImage } from "./types";
 
 /**
  * 顺序就是界面上的展示顺序，按对「AI 生图参考」的实用度排：
- * 材质纹理最常拿来垫图，其次是题材最广的聚合源，再是艺术风格参考，最后是题材较窄的天文。
+ * 材质纹理最常拿来垫图，其次是题材最广的聚合源，最后是艺术风格参考。
+ *
+ * **接入一个源的硬条件是图片本体带 CORS 头**，否则浏览器取不到 blob，
+ * 图只能显示、存不到本地，客户拿去当参考图时才会发现用不了——那比没有这个源更糟。
+ * 因此排除了：
+ *   - 芝加哥艺术：图片服务器挡在 Cloudflare 人机验证后，换域名换图片一律 403
+ *   - NASA：图片托管无 CORS 头
+ * 两家的 API 本身都可用，将来若愿意让画布服务器代理图片流量，可以再加回来。
  */
-export const IMAGE_SOURCES: ImageSourceAdapter[] = [polyhavenAdapter, openverseAdapter, articAdapter, metAdapter, nasaAdapter];
+export const IMAGE_SOURCES: ImageSourceAdapter[] = [polyhavenAdapter, openverseAdapter, metAdapter];
 
 export const IMAGE_LIBRARY_PAGE_SIZE = 24;
 
