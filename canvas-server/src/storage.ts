@@ -46,6 +46,11 @@ export function userRoot(userId: string) {
     return resolve(join(config.dataDir, "users", userId));
 }
 
+/** 自建图库的落盘位置，和 users/ 平级。id 由服务端生成，不含用户输入，无需路径校验。 */
+export function libraryFilePath(id: string, ext: string) {
+    return resolve(join(config.dataDir, "library", `${id}.${ext}`));
+}
+
 export async function readUserFile(absolutePath: string) {
     const file = Bun.file(absolutePath);
     return (await file.exists()) ? file : null;

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { LibraryCard } from "@/components/library/library-card";
 import { useLibraryActions } from "@/components/library/use-library-actions";
 import { useLibraryList } from "@/components/library/use-library-list";
-import { IMAGE_SOURCES } from "@/services/api/image-library";
+import { findSource, IMAGE_SOURCES } from "@/services/api/image-library";
 import { cn } from "@/lib/utils";
 
 const ALL_SOURCE_IDS = IMAGE_SOURCES.map((source) => source.id);
@@ -55,7 +55,9 @@ export default function LibraryPage() {
                     </div>
 
                     {/* 某个源挂了只提示，不挡住其余结果 */}
-                    {failedSources.length ? <Alert className="mx-auto mt-4 max-w-2xl" type="warning" showIcon message={t("library.sourceFailed", { names: failedSources.join("、") })} /> : null}
+                    {failedSources.length ? (
+                        <Alert className="mx-auto mt-4 max-w-2xl" type="warning" showIcon message={t("library.sourceFailed", { names: failedSources.map((id) => findSource(id)?.name || id).join("、") })} />
+                    ) : null}
 
                     {query.isLoading ? (
                         <div className="mt-16 text-center">

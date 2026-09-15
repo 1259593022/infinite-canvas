@@ -1,11 +1,29 @@
 import { randomBytes } from "node:crypto";
+import { unlink } from "node:fs/promises";
 import { Hono } from "hono";
 
 import { clientIp, hashPassword, issueSession, passwordProblem, rateLimited, requireAdmin, requireAuth, revokeSession, usernameProblem, verifyPassword, type AuthVars } from "./auth";
 import { fetchUpstreamBilling, invalidateBilling } from "./billing";
 import { config } from "./config";
-import { bindChannel, createUser, db, findUserById, findUserByUsername, getChannel, getQuota, getSyncObject, listUsers, purgeExpiredSessions, recordSyncObject, unbindChannel } from "./db";
-import { measureUserUsage, readUserFile, resolveUserPath, writeUserFile } from "./storage";
+import {
+    bindChannel,
+    createUser,
+    db,
+    deleteLibraryImage,
+    findUserById,
+    findUserByUsername,
+    getChannel,
+    getLibraryImage,
+    getQuota,
+    getSyncObject,
+    insertLibraryImage,
+    listUsers,
+    purgeExpiredSessions,
+    recordSyncObject,
+    searchLibraryImages,
+    unbindChannel,
+} from "./db";
+import { libraryFilePath, measureUserUsage, readUserFile, resolveUserPath, writeUserFile } from "./storage";
 
 const app = new Hono<{ Variables: AuthVars }>();
 
@@ -81,6 +99,54 @@ app.get("/api/billing", requireAuth, async (c) => {
     return c.json({ balance: await fetchUpstreamBilling(c.get("user").id) });
 });
 
+/* ============ 自建图库 ============ */
+
+/** 上传只放行这几种，避免有人把 svg（可内嵌脚本）或任意文件塞进来当图发给所有客户。 */
+const LIBRARY_MIME: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+};
+
+/**
+ * 图库列表。**故意不要求登录**——画布本身支持未登录使用，
+ * 素材库要登录才能看会让这个功能失去大半意义。
+ */
+app.get("/api/library/images", (c) => {
+    const page = Math.max(1, Number(c.req.query("page")) || 1);
+    const pageSize = Math.min(60, Math.max(1, Number(c.req.query("pageSize")) || 24));
+    const { items, total } = searchLibraryImages(c.req.query("q") || "", pageSize, (page - 1) * pageSize);
+    return c.json({
+        total,
+        items: items.map((item) => ({
+            id: item.id,
+            title: item.title,
+            tags: item.tags ? item.tags.split(",").filter(Boolean) : [],
+            width: item.width,
+            height: item.height,
+            bytes: item.bytes,
+        })),
+    });
+});
+
+app.get("/api/library/file/:id", async (c) => {
+    const row = getLibraryImage(c.req.param("id"));
+    if (!row) return c.json({ error: "不存在" }, 404);
+
+    const file = await readUserFile(libraryFilePath(row.id, row.ext));
+    // 库里有记录但文件没了：手工删过盘上的文件，或上传中途失败
+    if (!file) return c.json({ error: "文件缺失" }, 404);
+
+    return new Response(file, {
+        headers: {
+            "Content-Type": row.mime,
+            // 内容按 id 寻址，改了就是新 id，可以放心长缓存
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    });
+});
+
 /* ============ 同步 ============ */
 
 app.get("/api/sync/file", requireAuth, async (c) => {
@@ -146,6 +212,45 @@ app.post("/api/admin/users/:id/channel", requireAdmin, async (c) => {
 app.delete("/api/admin/users/:id/channel", requireAdmin, (c) => {
     unbindChannel(c.req.param("id"));
     invalidateBilling(c.req.param("id"));
+    return c.json({ ok: true });
+});
+
+app.post("/api/admin/library", requireAdmin, async (c) => {
+    const body = await c.req.parseBody();
+    const file = body.file;
+    if (!(file instanceof File)) return c.json({ error: "缺少 file 字段" }, 400);
+
+    const ext = LIBRARY_MIME[file.type];
+    if (!ext) return c.json({ error: `不支持的格式 ${file.type || "(未知)"}，仅接受 png / jpeg / webp / gif` }, 415);
+    if (file.size > config.libraryMaxFileBytes) return c.json({ error: `图片过大，上限 ${Math.round(config.libraryMaxFileBytes / 1024 / 1024)}MB` }, 413);
+
+    const id = randomBytes(12).toString("hex");
+    const title = String(body.title || file.name || id).trim().slice(0, 200);
+    // 标签统一小写去重，避免「材质」和「材质 」被当成两个
+    const tags = Array.from(new Set(String(body.tags || "").split(/[,，\s]+/).map((tag) => tag.trim().toLowerCase()).filter(Boolean))).slice(0, 12);
+
+    // 先落盘再写库：反过来的话进程在两步之间挂掉，库里会留下一条指向不存在文件的记录
+    await writeUserFile(libraryFilePath(id, ext), new Uint8Array(await file.arrayBuffer()));
+    insertLibraryImage({
+        id,
+        title,
+        tags: tags.join(","),
+        ext,
+        mime: file.type,
+        bytes: file.size,
+        width: Number(body.width) || null,
+        height: Number(body.height) || null,
+    });
+
+    return c.json({ ok: true, id, title, tags }, 201);
+});
+
+app.delete("/api/admin/library/:id", requireAdmin, async (c) => {
+    const row = getLibraryImage(c.req.param("id"));
+    if (!row) return c.json({ error: "不存在" }, 404);
+    // 先删记录再删文件：顺序反了的话删文件成功、删记录失败会留下坏链接
+    deleteLibraryImage(row.id);
+    await unlink(libraryFilePath(row.id, row.ext)).catch(() => undefined);
     return c.json({ ok: true });
 });
 

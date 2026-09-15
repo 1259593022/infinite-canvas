@@ -100,6 +100,21 @@ CREATE TABLE IF NOT EXISTS sync_objects (
 );
 `);
 
+db.exec(`
+CREATE TABLE IF NOT EXISTS library_images (
+    id         TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    tags       TEXT NOT NULL DEFAULT '',
+    ext        TEXT NOT NULL,
+    mime       TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    width      INTEGER,
+    height     INTEGER,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_library_created ON library_images(created_at DESC);
+`);
+
 // SQLite 没有 ADD COLUMN IF NOT EXISTS，先查表结构再决定加不加，让重复启动是安全的。
 function addColumnIfMissing(table: string, column: string, definition: string) {
     const columns = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all();
@@ -234,4 +249,53 @@ export function recordSyncObject(userId: string, path: string, mime: string, byt
         upsertObjectStmt.run(userId, path, mime, bytes, nowIso());
         addUsedBytesStmt.run(bytes - (previous?.bytes || 0), userId);
     })();
+}
+
+/* ---------- 自建图库 ---------- */
+
+export type LibraryImageRow = {
+    id: string;
+    title: string;
+    /** 逗号分隔。规模只有几千张，用 LIKE 过滤足够，不值得上全文索引 */
+    tags: string;
+    ext: string;
+    mime: string;
+    bytes: number;
+    width: number | null;
+    height: number | null;
+    created_at: string;
+};
+
+const insertLibraryStmt = db.query<never, [string, string, string, string, string, number, number | null, number | null, string]>(
+    "INSERT INTO library_images (id, title, tags, ext, mime, bytes, width, height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+);
+const getLibraryStmt = db.query<LibraryImageRow, [string]>("SELECT * FROM library_images WHERE id = ?");
+const deleteLibraryStmt = db.query<never, [string]>("DELETE FROM library_images WHERE id = ?");
+
+export function insertLibraryImage(row: Omit<LibraryImageRow, "created_at">) {
+    insertLibraryStmt.run(row.id, row.title, row.tags, row.ext, row.mime, row.bytes, row.width, row.height, nowIso());
+}
+
+export function getLibraryImage(id: string) {
+    return getLibraryStmt.get(id);
+}
+
+export function deleteLibraryImage(id: string) {
+    deleteLibraryStmt.run(id);
+}
+
+/** 关键词同时匹配标题和标签；空关键词返回最新的一批。 */
+export function searchLibraryImages(keyword: string, limit: number, offset: number) {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+        const items = db.query<LibraryImageRow, [number, number]>("SELECT * FROM library_images ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
+        const total = db.query<{ c: number }, []>("SELECT COUNT(*) c FROM library_images").get()?.c || 0;
+        return { items, total };
+    }
+    // LIKE 的通配符要转义，否则客户搜 "100%" 会变成匹配一切
+    const pattern = `%${trimmed.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const where = "WHERE (title LIKE ?1 ESCAPE '\\' OR tags LIKE ?1 ESCAPE '\\')";
+    const items = db.query<LibraryImageRow, [string, number, number]>(`SELECT * FROM library_images ${where} ORDER BY created_at DESC LIMIT ?2 OFFSET ?3`).all(pattern, limit, offset);
+    const total = db.query<{ c: number }, [string]>(`SELECT COUNT(*) c FROM library_images ${where}`).get(pattern)?.c || 0;
+    return { items, total };
 }

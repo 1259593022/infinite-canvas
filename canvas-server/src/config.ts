@@ -35,6 +35,14 @@ export const config = {
     /** 单文件上限，挡住明显异常的请求。 */
     maxFileBytes: int("MAX_FILE_BYTES", 100 * 1024 * 1024),
 
+    /**
+     * 自建图库单张上限。
+     *
+     * 这些图是直接发给所有客户的，且没有生成缩略图——列表里一次要显示几十张，
+     * 每张 10MB 的话首屏就是几百兆流量。素材图控制在这个量级以内是合理的。
+     */
+    libraryMaxFileBytes: int("LIBRARY_MAX_FILE_BYTES", 10 * 1024 * 1024),
+
     /** 运营后台接口的口令，用于建号、绑定 llmway 令牌。为空则后台接口整体关闭。 */
     adminToken: process.env.ADMIN_TOKEN || "",
 

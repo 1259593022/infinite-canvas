@@ -1,3 +1,4 @@
+import { houseAdapter } from "./adapters/house";
 import { metAdapter } from "./adapters/met";
 import { openverseAdapter } from "./adapters/openverse";
 import { polyhavenAdapter } from "./adapters/polyhaven";
@@ -6,7 +7,8 @@ import type { ImageSourceAdapter, LibraryImage } from "./types";
 export type { ImageSourceAdapter, LibraryImage } from "./types";
 
 /**
- * 顺序就是界面上的展示顺序，按对「AI 生图参考」的实用度排：
+ * 顺序就是界面上的展示顺序。自建库排第一——那是运营方自己策展的内容，
+ * 相关度最高也最可控；后面三个开放源按对「AI 生图参考」的实用度排：
  * 材质纹理最常拿来垫图，其次是题材最广的聚合源，最后是艺术风格参考。
  *
  * **接入一个源的硬条件是图片本体带 CORS 头**，否则浏览器取不到 blob，
@@ -16,7 +18,7 @@ export type { ImageSourceAdapter, LibraryImage } from "./types";
  *   - NASA：图片托管无 CORS 头
  * 两家的 API 本身都可用，将来若愿意让画布服务器代理图片流量，可以再加回来。
  */
-export const IMAGE_SOURCES: ImageSourceAdapter[] = [polyhavenAdapter, openverseAdapter, metAdapter];
+export const IMAGE_SOURCES: ImageSourceAdapter[] = [houseAdapter, polyhavenAdapter, openverseAdapter, metAdapter];
 
 export const IMAGE_LIBRARY_PAGE_SIZE = 24;
 
