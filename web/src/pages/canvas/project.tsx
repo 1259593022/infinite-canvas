@@ -709,8 +709,15 @@ function InfiniteCanvasPage() {
         const viewRight = viewLeft + width / viewport.k + padding * 2;
         const viewBottom = viewTop + height / viewport.k + padding * 2;
 
-        return nodes.filter((node) => node.position.x + node.width > viewLeft && node.position.x < viewRight && node.position.y + node.height > viewTop && node.position.y < viewBottom);
-    }, [nodes, size.height, size.width, viewport.k, viewport.x, viewport.y]);
+        return nodes.filter((node) => {
+            // 面板开着的那个节点永远渲染，不受视口裁剪影响。
+            // 面板是挂在节点内部的，节点一旦被裁掉就跟着卸载——看起来像「节点取消选中、
+            // 设置框消失」，实际选中状态还在，但面板的内部状态（滚动位置、没提交的输入、
+            // 展开的分组）全都被重置了，划回来也回不去。
+            if (node.id === dialogNodeId) return true;
+            return node.position.x + node.width > viewLeft && node.position.x < viewRight && node.position.y + node.height > viewTop && node.position.y < viewBottom;
+        });
+    }, [dialogNodeId, nodes, size.height, size.width, viewport.k, viewport.x, viewport.y]);
 
     const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
     // The toolbar follows a single selected node selected by click, creation, marquee, or keyboard.
