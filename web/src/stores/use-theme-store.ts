@@ -11,9 +11,12 @@ type ThemeStore = {
     canvasHue: number;
     /** 染色浓度 0-1。**默认 0**：不染色时界面和加这个功能之前逐字一致 */
     canvasTint: number;
+    /** 亮度 -1~1，0 为内置主题原样。负=更暗，正=更亮 */
+    canvasBrightness: number;
     setTheme: (theme: ThemeName) => void;
     setCanvasHue: (hue: number) => void;
     setCanvasTint: (tint: number) => void;
+    setCanvasBrightness: (brightness: number) => void;
     resetCanvasColor: () => void;
 };
 
@@ -23,10 +26,12 @@ export const useThemeStore = create<ThemeStore>()(
             theme: "dark",
             canvasHue: DEFAULT_CANVAS_HUE,
             canvasTint: 0,
+            canvasBrightness: 0,
             setTheme: (theme) => set({ theme }),
             setCanvasHue: (canvasHue) => set({ canvasHue }),
             setCanvasTint: (canvasTint) => set({ canvasTint }),
-            resetCanvasColor: () => set({ canvasHue: DEFAULT_CANVAS_HUE, canvasTint: 0 }),
+            setCanvasBrightness: (canvasBrightness) => set({ canvasBrightness }),
+            resetCanvasColor: () => set({ canvasHue: DEFAULT_CANVAS_HUE, canvasTint: 0, canvasBrightness: 0 }),
         }),
         {
             name: "infinite-canvas:theme_store",
@@ -39,6 +44,7 @@ export const useThemeStore = create<ThemeStore>()(
                     ...saved,
                     canvasHue: typeof saved.canvasHue === "number" ? saved.canvasHue : DEFAULT_CANVAS_HUE,
                     canvasTint: typeof saved.canvasTint === "number" ? saved.canvasTint : 0,
+                    canvasBrightness: typeof saved.canvasBrightness === "number" ? saved.canvasBrightness : 0,
                 };
             },
         },

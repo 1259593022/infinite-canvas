@@ -13,5 +13,6 @@ export function useCanvasTheme(): CanvasTheme {
     const mode = useThemeStore((state) => state.theme);
     const hue = useThemeStore((state) => state.canvasHue);
     const tint = useThemeStore((state) => state.canvasTint);
-    return useMemo(() => buildCanvasTheme(mode, hue, tint), [mode, hue, tint]);
+    const brightness = useThemeStore((state) => state.canvasBrightness);
+    return useMemo(() => buildCanvasTheme(mode, hue, tint, brightness), [mode, hue, tint, brightness]);
 }

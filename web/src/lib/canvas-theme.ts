@@ -78,6 +78,14 @@ export const DEFAULT_CANVAS_HUE = 40;
 /** 浓度拉满时给饱和度加多少。再高文字就开始显脏了。 */
 const MAX_SATURATION_ADD = 0.18;
 
+/**
+ * 亮度滑块拉满时，背景最多移动多少。
+ *
+ * 这个值是对比度的安全边界：深色模式底色 L≈0.09、正文 L≈0.96，抬高 0.10 之后
+ * 两者仍有 0.77 的亮度差，远在可读范围内。再大就开始吃掉对比度了。
+ */
+const MAX_LIGHTNESS_SHIFT = 0.1;
+
 /** 预设色相，外观面板上那排色块。 */
 export const CANVAS_HUE_PRESETS = [0, 40, 80, 150, 190, 220, 265, 320];
 
@@ -138,15 +146,16 @@ function hslToRgb(h: number, s: number, l: number) {
  * 饱和度用加法而不是乘法：内置主题里像 #fafaf9 这种饱和度几乎为 0，
  * 乘法永远染不上色。
  */
-function shiftColor(value: string, hue: number, tint: number): string {
-    // tint 为 0 时直接原样返回，保证默认状态逐字等于内置主题
-    if (tint <= 0) return value;
+function shiftColor(value: string, hue: number, tint: number, brightness: number, backgroundL: number, span: number): string {
     const rgba = parseColor(value);
     if (!rgba) return value;
 
-    const { s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b);
-    const nextS = Math.min(1, Math.max(0, s + tint * MAX_SATURATION_ADD));
-    const { r, g, b } = hslToRgb(hue, nextS, l);
+    const { h, s, l } = rgbToHsl(rgba.r, rgba.g, rgba.b);
+    // 浓度为 0 时保留原色相，只让亮度生效——不然「不染色」也会被强行改成滑块的色相
+    const nextH = tint > 0 ? hue : h;
+    const nextS = tint > 0 ? Math.min(1, Math.max(0, s + tint * MAX_SATURATION_ADD)) : s;
+    const nextL = Math.min(1, Math.max(0, l + brightness * MAX_LIGHTNESS_SHIFT * proximityToBackground(l, backgroundL, span)));
+    const { r, g, b } = hslToRgb(nextH, nextS, nextL);
 
     if (rgba.a === null) return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
     // 保留原来的 alpha 写法（.28 这种简写照原样输出，避免无谓的视觉差异）
@@ -154,14 +163,39 @@ function shiftColor(value: string, hue: number, tint: number): string {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-/** 按色相和浓度派生整套主题。tint=0 时返回的就是内置主题本身。 */
-export function buildCanvasTheme(mode: CanvasColorTheme, hue: number = DEFAULT_CANVAS_HUE, tint: number = 0): CanvasTheme {
+/**
+ * 亮度位移的权重：越接近背景色的色值移动越多，越接近正文的越不动。
+ *
+ * 这样拉「亮度」时改变的主要是底色和面板这类大面积表面，文字几乎待在原地，
+ * 于是明暗差不会被一起推平——否则背景和文字同向移动，对比度会直接塌掉。
+ */
+function proximityToBackground(l: number, backgroundL: number, span: number) {
+    if (span <= 0) return 1;
+    return Math.max(0, 1 - Math.abs(l - backgroundL) / span);
+}
+
+/**
+ * 按色相、浓度、亮度派生整套主题。
+ * 三个参数都是默认值时原样返回内置主题，保证默认观感零变化。
+ */
+export function buildCanvasTheme(mode: CanvasColorTheme, hue: number = DEFAULT_CANVAS_HUE, tint: number = 0, brightness: number = 0): CanvasTheme {
     const base = canvasThemes[mode];
-    if (tint <= 0) return base;
-    const map = (group: Record<string, string>) => Object.fromEntries(Object.entries(group).map(([key, value]) => [key, shiftColor(value, hue, tint)]));
+    if (tint <= 0 && brightness === 0) return base;
+
+    // 以背景为基准算每个色值的「离背景多远」，span 取全主题最大距离
+    const backgroundL = rgbToHsl(...rgbOf(base.canvas.background)).l;
+    const allL = [base.canvas, base.node, base.toolbar].flatMap((group) => Object.values(group).map((value) => rgbToHsl(...rgbOf(value)).l));
+    const span = Math.max(...allL.map((l) => Math.abs(l - backgroundL)));
+
+    const map = (group: Record<string, string>) => Object.fromEntries(Object.entries(group).map(([key, value]) => [key, shiftColor(value, hue, tint, brightness, backgroundL, span)]));
     return {
         canvas: map(base.canvas) as CanvasTheme["canvas"],
         node: map(base.node) as CanvasTheme["node"],
         toolbar: map(base.toolbar) as CanvasTheme["toolbar"],
     };
+}
+
+function rgbOf(value: string): [number, number, number] {
+    const parsed = parseColor(value);
+    return parsed ? [parsed.r, parsed.g, parsed.b] : [0, 0, 0];
 }

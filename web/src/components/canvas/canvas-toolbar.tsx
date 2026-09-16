@@ -66,6 +66,8 @@ export function CanvasToolbar({
     const canvasTint = useThemeStore((state) => state.canvasTint);
     const setCanvasHue = useThemeStore((state) => state.setCanvasHue);
     const setCanvasTint = useThemeStore((state) => state.setCanvasTint);
+    const canvasBrightness = useThemeStore((state) => state.canvasBrightness);
+    const setCanvasBrightness = useThemeStore((state) => state.setCanvasBrightness);
     const resetCanvasColor = useThemeStore((state) => state.resetCanvasColor);
     const theme = useCanvasTheme();
     const [hovered, setHovered] = useState<string | null>(null);
@@ -235,7 +237,7 @@ export function CanvasToolbar({
                     </div>
                     <div className="mt-3 flex items-center justify-between px-1 pb-1.5">
                         <span className="text-[11px] font-medium opacity-50">{t("canvas.toolbar.colorTone")}</span>
-                        {canvasTint > 0 ? (
+                        {canvasTint > 0 || canvasBrightness !== 0 ? (
                             <button type="button" className="text-[11px] underline-offset-2 opacity-60 transition hover:opacity-100 hover:underline" onClick={resetCanvasColor}>
                                 {t("canvas.toolbar.resetTone")}
                             </button>
@@ -277,7 +279,7 @@ export function CanvasToolbar({
                             aria-label={t("canvas.toolbar.hue")}
                         />
                         <div className="mt-2 flex items-center gap-2">
-                            <span className="shrink-0 text-[11px] opacity-50">{t("canvas.toolbar.tint")}</span>
+                            <span className="w-8 shrink-0 text-[11px] opacity-50">{t("canvas.toolbar.tint")}</span>
                             <input
                                 type="range"
                                 min={0}
@@ -285,8 +287,24 @@ export function CanvasToolbar({
                                 value={Math.round(canvasTint * 100)}
                                 onChange={(event) => setCanvasTint(Number(event.target.value) / 100)}
                                 className="h-1.5 w-full cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
-                                style={{ background: `linear-gradient(to right, ${theme.toolbar.itemHover}, ${buildCanvasTheme(colorTheme, canvasHue, 1).node.fill})` }}
+                                style={{ background: `linear-gradient(to right, ${theme.toolbar.itemHover}, ${buildCanvasTheme(colorTheme, canvasHue, 1, canvasBrightness).node.fill})` }}
                                 aria-label={t("canvas.toolbar.tint")}
+                            />
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                            <span className="w-8 shrink-0 text-[11px] opacity-50">{t("canvas.toolbar.brightness")}</span>
+                            <input
+                                type="range"
+                                min={-100}
+                                max={100}
+                                value={Math.round(canvasBrightness * 100)}
+                                onChange={(event) => setCanvasBrightness(Number(event.target.value) / 100)}
+                                className="h-1.5 w-full cursor-pointer appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
+                                // 两端直接用最暗/最亮时的真实底色，所见即所得
+                                style={{
+                                    background: `linear-gradient(to right, ${buildCanvasTheme(colorTheme, canvasHue, canvasTint, -1).canvas.background}, ${buildCanvasTheme(colorTheme, canvasHue, canvasTint, 1).canvas.background})`,
+                                }}
+                                aria-label={t("canvas.toolbar.brightness")}
                             />
                         </div>
                     </div>
