@@ -1187,9 +1187,7 @@ function InfiniteCanvasPage() {
             setToolbarNodeId(null);
             setDialogNodeId(null);
             if (pendingConnectionCreateRef.current) cancelPendingConnectionCreate();
-            // 左键和中键都可能发起框选——具体哪个取决于当前工具模式，
-            // 由 InfiniteCanvas 的 shouldMarquee 判定后才调到这里。
-            if (event.button !== 0 && event.button !== 1) return;
+            if (event.button !== 0) return;
 
             const world = screenToCanvas(event.clientX, event.clientY);
             const nextSelectionBox = {

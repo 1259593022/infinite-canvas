@@ -113,27 +113,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id]");
         const temporaryTool = event.ctrlKey || isSpacePressed;
         const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
-
-        const isMiddle = event.button === 1;
-        const isLeft = event.button === 0;
-        if (!isMiddle && !isLeft) return;
-
-        // 中键永远做和左键相反的事：移动模式下框选、选择模式下平移。
-        // 这样平移和框选始终同时可用，不必为了框一下就去切工具模式——而移动的频率
-        // 远高于框选，所以更顺手的那个键（左键）留给移动。
-        const wantsMarquee = isMiddle ? activeTool === "pan" : activeTool === "select";
-
-        // 框选只能从空白处起手，从节点上起拖会和节点自身的指针处理打架。
-        const shouldMarquee = wantsMarquee && isBackgroundClick;
-        //
-        // 左键只在**空白处**才平移。曾经试过让它在节点上也平移（抓手工具），
-        // 结果踩了一个坑：平移分支里的 event.preventDefault() 会连带压掉浏览器的
-        // 兼容鼠标事件（mousedown），而节点的选中走 onMouseDownCapture、拖拽走
-        // onMouseDown —— 两个都收不到事件，变成「节点既选不中也拖不动」。
-        // 原来只在空白处平移时不会暴露，因为那里本来就没有节点要响应。
-        //
-        // 光标停在节点上想平移，用中键。
-        const shouldPan = !shouldMarquee && (isMiddle || isBackgroundClick);
+        const shouldPan = event.button === 1 || (event.button === 0 && activeTool === "pan" && isBackgroundClick);
 
         if (shouldPan) {
             event.preventDefault();
@@ -152,9 +132,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             return;
         }
 
-        if (shouldMarquee) {
-            // 中键框选必须 preventDefault：Windows 下中键按下会进入浏览器的自动滚动模式，
-            // 一拖就变成页面滚动而不是框选。
+        if (event.button === 0 && isBackgroundClick) {
             event.preventDefault();
             event.currentTarget.setPointerCapture(event.pointerId);
             onCanvasMouseDown?.(event);
@@ -235,11 +213,6 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             className="relative h-full w-full select-none overflow-hidden"
             style={{ background: theme.canvas.background, cursor }}
             onPointerDown={handlePointerDown}
-            // 中键抬起时浏览器还有一层默认行为（Windows 自动滚动、Linux 中键粘贴），
-            // pointerdown 的 preventDefault 挡不住，这里再挡一次。
-            onAuxClick={(event) => {
-                if (event.button === 1) event.preventDefault();
-            }}
             onDoubleClick={handleDoubleClick}
             onWheel={handleWheel}
             onContextMenu={onContextMenu}
