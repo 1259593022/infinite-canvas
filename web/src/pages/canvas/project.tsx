@@ -156,6 +156,25 @@ export default function CanvasPage() {
     return <InfiniteCanvasPage />;
 }
 
+/**
+ * 新建节点后要不要自动打开面板。
+ *
+ * 双击空白建节点和从节点拉线建节点共用这一套判断，否则同一个插件节点
+ * 走两条路会有两种表现。
+ *
+ * - hidePanel 的展示型插件节点：不开
+ * - 自带 Panel 的插件节点：只有声明了 autoOpenPanel 才开
+ * - 声明 useBuiltinPanel 的插件节点：开内置生成面板，和图片节点一样
+ * - 内置节点：图片/视频/配置沿用原有的「建完即开」行为
+ */
+function shouldOpenPanelOnCreate(type: CanvasNodeTypeId) {
+    const definition = getNodeDefinition(type);
+    if (definition?.hidePanel) return false;
+    if (definition?.Panel) return Boolean(definition.autoOpenPanel);
+    if (definition?.useBuiltinPanel) return true;
+    return isBuiltinType(type) && type !== CanvasNodeType.Text && type !== CanvasNodeType.Audio && type !== CanvasNodeType.Group;
+}
+
 function InfiniteCanvasPage() {
     const { message, modal } = App.useApp();
     const { t } = useTranslation();
@@ -618,7 +637,8 @@ function InfiniteCanvasPage() {
     );
 
     const createConnectedNode = useCallback(
-        (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio, pending: PendingConnectionCreate) => {
+        // 类型放宽到 CanvasNodeTypeId：连线菜单里也列了插件节点
+        (type: CanvasNodeTypeId, pending: PendingConnectionCreate) => {
             const metadata = type === CanvasNodeType.Config ? { model: effectiveConfig.imageModel || effectiveConfig.model, size: effectiveConfig.size, count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count) } : undefined;
             const newNode = createCanvasNode(type, pending.position, metadata);
             const connection = normalizeConnection(pending.connection.nodeId, newNode.id, [...nodesRef.current, newNode], pending.connection.handleType);
@@ -630,7 +650,8 @@ function InfiniteCanvasPage() {
             setConnections((prev) => [...prev, { id: nanoid(), ...connection }]);
             setSelectedNodeIds(new Set([newNode.id]));
             setSelectedConnectionId(null);
-            if (type !== CanvasNodeType.Text && type !== CanvasNodeType.Audio) setDialogNodeId(newNode.id);
+            // 和双击建节点走同一套判断，插件节点不会被强行弹出内置面板
+            if (shouldOpenPanelOnCreate(type)) setDialogNodeId(newNode.id);
             setPendingConnectionCreate(null);
             setConnecting(null);
         },
@@ -813,18 +834,7 @@ function InfiniteCanvasPage() {
             setNodes((prev) => [...prev, newNode]);
             setSelectedNodeIds(new Set([newNode.id]));
             setSelectedConnectionId(null);
-            const definition = getNodeDefinition(type);
-            // Display-only plugin nodes with hidePanel do not open a panel; custom Panels require autoOpenPanel on creation.
-            // Plugin nodes declaring useBuiltinPanel open the built-in generation panel on creation, like image nodes.
-            // Built-in image, video, and config nodes retain their existing open-on-create behavior.
-            const wantsPanel = definition?.hidePanel
-                ? false
-                : definition?.Panel
-                  ? Boolean(definition.autoOpenPanel)
-                  : definition?.useBuiltinPanel
-                    ? true
-                    : isBuiltinType(type) && type !== CanvasNodeType.Text && type !== CanvasNodeType.Audio && type !== CanvasNodeType.Group;
-            if (wantsPanel) setDialogNodeId(newNode.id);
+            if (shouldOpenPanelOnCreate(type)) setDialogNodeId(newNode.id);
         },
         [effectiveConfig.canvasImageCount, effectiveConfig.count, effectiveConfig.imageModel, effectiveConfig.model, effectiveConfig.size, getCanvasCenter],
     );

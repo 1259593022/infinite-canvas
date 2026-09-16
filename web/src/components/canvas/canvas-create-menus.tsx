@@ -3,8 +3,8 @@ import { ImageIcon, List, Music2, Settings2, Video, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
-import { CanvasNodeType, type ConnectionHandle, type Position } from "@/types/canvas";
+import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
+import { CanvasNodeType, type CanvasNodeTypeId, type ConnectionHandle, type Position } from "@/types/canvas";
 import { useCanvasTheme } from "@/hooks/use-canvas-theme";
 
 export type PendingConnectionCreate = {
@@ -18,14 +18,18 @@ export function ConnectionCreateMenu({
     onClose,
 }: {
     pending: PendingConnectionCreate;
-    onCreate: (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio) => void;
+    onCreate: (type: CanvasNodeTypeId) => void;
     onClose: () => void;
 }) {
     const theme = useCanvasTheme();
     const { t } = useTranslation();
+    useNodeRegistryVersion();
+    // 内置五项之外，把插件节点也列进来——扩展能力都在插件里，
+    // 从节点拉线时同样该能直接接上，不必先双击空白建好再连。
+    const pluginDefs = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false && getNodePluginId(def.type) !== "builtin");
     return (
         <div
-            className="absolute z-[120] w-[300px] rounded-[18px] border p-3 shadow-2xl backdrop-blur"
+            className="absolute z-[120] max-h-[70vh] w-[300px] overflow-y-auto rounded-[18px] border p-3 shadow-2xl backdrop-blur thin-scrollbar"
             data-connection-create-menu
             style={{ left: pending.position.x, top: pending.position.y, background: theme.node.panel, borderColor: theme.node.stroke, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
@@ -46,6 +50,21 @@ export function ConnectionCreateMenu({
                 <ConnectionCreateOption theme={theme} icon={<Music2 className="size-5" />} title={t("canvas.createMenu.audio")} onClick={() => onCreate(CanvasNodeType.Audio)} />
                 <ConnectionCreateOption theme={theme} icon={<Settings2 className="size-5" />} title={t("canvas.createMenu.config")} description={t("canvas.createMenu.configDescription")} onClick={() => onCreate(CanvasNodeType.Config)} />
             </div>
+
+            {/* 没装插件时整段不渲染，免得留一条空标题 */}
+            {pluginDefs.length ? (
+                <>
+                    <div className="my-2 h-px" style={{ background: theme.node.stroke }} />
+                    <div className="px-1 pb-1 text-xs font-medium" style={{ color: theme.node.muted }}>
+                        {t("canvas.createMenu.plugins")}
+                    </div>
+                    <div className="grid gap-1">
+                        {pluginDefs.map((def) => (
+                            <ConnectionCreateOption key={def.type} theme={theme} icon={def.icon} title={def.title} description={def.description} onClick={() => onCreate(def.type)} />
+                        ))}
+                    </div>
+                </>
+            ) : null}
         </div>
     );
 }
