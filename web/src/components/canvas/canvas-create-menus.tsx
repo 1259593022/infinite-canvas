@@ -70,11 +70,17 @@ const SUBMENU_OPEN_DELAY = 120;
 const SUBMENU_CLOSE_DELAY = 220;
 const SUBMENU_WIDTH = 300;
 const SUBMENU_GAP = 8;
+/** 单项高度 h-16 + gap-1，容器上下 p-3；用来预估内容高度好把菜单摆正 */
+const SUBMENU_ITEM_HEIGHT = 64;
+const SUBMENU_ITEM_GAP = 4;
+const SUBMENU_PADDING = 24;
+/** 距离屏幕边缘的最小留白 */
+const SUBMENU_MARGIN = 8;
 
 function PluginSubmenu({ theme, definitions, onCreate }: { theme: CanvasTheme; definitions: ReturnType<typeof listNodeDefinitions>; onCreate: (type: CanvasNodeTypeId) => void }) {
     const { t } = useTranslation();
     const triggerRef = useRef<HTMLButtonElement>(null);
-    const [box, setBox] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+    const [box, setBox] = useState<{ left: number; top: number; maxHeight: number; scale: number } | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const clearTimer = () => {
@@ -85,14 +91,32 @@ function PluginSubmenu({ theme, definitions, onCreate }: { theme: CanvasTheme; d
     const open = () => {
         clearTimer();
         timerRef.current = setTimeout(() => {
-            const rect = triggerRef.current?.getBoundingClientRect();
-            if (!rect) return;
+            const trigger = triggerRef.current;
+            const rect = trigger?.getBoundingClientRect();
+            if (!trigger || !rect) return;
+
+            // 主菜单在画布的 transform 层里，跟着 viewport.k 缩放；二级菜单 portal 到 body
+            // 之后是屏幕坐标、永远 100%，两者尺寸会对不上。用触发项的实际渲染宽度反推
+            // 缩放比例，让二级菜单跟主菜单一样大——比把 viewport.k 一路传进来更稳。
+            const scale = trigger.offsetWidth > 0 ? rect.width / trigger.offsetWidth : 1;
+
+            const viewportW = window.innerWidth;
+            const viewportH = window.innerHeight;
+            const width = SUBMENU_WIDTH * scale;
+
+            // 先估内容高度，再决定摆哪——之前是直接塞进触发项下方的剩余空间，
+            // 触发项越靠近底部能显示的条目越少，贴底时几乎弹不出来。
+            const contentHeight = (definitions.length * SUBMENU_ITEM_HEIGHT + Math.max(0, definitions.length - 1) * SUBMENU_ITEM_GAP + SUBMENU_PADDING) * scale;
+            const height = Math.min(contentHeight, viewportH - SUBMENU_MARGIN * 2);
+
             // 右边放不下就翻到左边——菜单出现在连线落点，可能贴着屏幕右缘
-            const fitsRight = rect.right + SUBMENU_GAP + SUBMENU_WIDTH <= window.innerWidth - 8;
-            const left = fitsRight ? rect.right + SUBMENU_GAP : Math.max(8, rect.left - SUBMENU_GAP - SUBMENU_WIDTH);
-            // 顶端对齐触发项，再往上提一点留出内边距；贴底时上移，保证不出屏
-            const top = Math.max(8, Math.min(rect.top - 12, window.innerHeight - 120));
-            setBox({ left, top, maxHeight: window.innerHeight - top - 16 });
+            const fitsRight = rect.right + SUBMENU_GAP + width <= viewportW - SUBMENU_MARGIN;
+            const left = fitsRight ? rect.right + SUBMENU_GAP : Math.max(SUBMENU_MARGIN, rect.left - SUBMENU_GAP - width);
+            // 顶端对齐触发项，装不下就整体上移，而不是压缩高度
+            const top = Math.min(Math.max(SUBMENU_MARGIN, rect.top - SUBMENU_PADDING / 2), Math.max(SUBMENU_MARGIN, viewportH - SUBMENU_MARGIN - height));
+
+            // maxHeight 作用在缩放前的元素上，所以要除回去
+            setBox({ left, top, scale, maxHeight: height / scale });
         }, SUBMENU_OPEN_DELAY);
     };
 
@@ -134,7 +158,18 @@ function PluginSubmenu({ theme, definitions, onCreate }: { theme: CanvasTheme; d
                           // portal 到 body 之后不在主菜单的子树里，不标上就会被当成点击空白，菜单直接关掉。
                           data-connection-create-menu
                           data-canvas-no-zoom
-                          style={{ left: box.left, top: box.top, width: SUBMENU_WIDTH, maxHeight: box.maxHeight, background: theme.node.panel, borderColor: theme.node.stroke, color: theme.node.text }}
+                          style={{
+                              left: box.left,
+                              top: box.top,
+                              width: SUBMENU_WIDTH,
+                              maxHeight: box.maxHeight,
+                              // 和主菜单同比例缩放，两级菜单看起来才是一套
+                              transform: `scale(${box.scale})`,
+                              transformOrigin: "top left",
+                              background: theme.node.panel,
+                              borderColor: theme.node.stroke,
+                              color: theme.node.text,
+                          }}
                           onMouseEnter={clearTimer}
                           onMouseLeave={close}
                           onMouseDown={(event) => event.stopPropagation()}
