@@ -262,7 +262,7 @@ export default {
             deleteTitle: "Delete canvases?", deleteDescription: "This will delete {{count}} canvases along with their nodes and connections.",
         },
         export: { defaultProjectName: "Infinite Canvas", defaultNodesName: "Canvas elements", item: "Element" },
-        createMenu: { plugins: "Plugin nodes", 
+        createMenu: { pluginsDescription: "{{count}} installed — hover to expand", plugins: "Plugin nodes", 
             fromNode: "Generate from this node", close: "Close", text: "Generate text", textDescription: "Scripts, ad copy, and brand content", image: "Generate image", video: "Generate video", audio: "Audio reference", config: "Configuration node", configDescription: "Model, size, count, and input order", select: "Select a node",
         },
         node: {
