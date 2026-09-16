@@ -1244,19 +1244,8 @@ function InfiniteCanvasPage() {
         [selectNodeByEvent],
     );
 
-    /**
-     * 这一下按键是不是画布平移手势。
-     *
-     * 移动模式是抓手工具，左键拖节点也是平移画布。但节点拖拽走 onMouseDown、
-     * 画布平移走 onPointerDown，pointerdown 先触发且不受节点里 stopPropagation 影响，
-     * 所以要靠这个标记让节点主动让路，否则节点会跟着画布一起动。
-     */
-    const canvasPanningRef = useRef(false);
-
     const handleNodeMouseDown = useCallback((event: ReactMouseEvent, nodeId: string) => {
         event.stopPropagation();
-        // 画布正在平移：不起拖。选择仍然生效（capture 阶段已处理），点一下还是能选中节点。
-        if (canvasPanningRef.current) return;
         // Capture already selected the node; this only starts dragging, with a fallback selection if capture did not run.
         const currentNodes = nodesRef.current;
         const nextSelected = pendingSelectionRef.current ?? selectNodeByEvent(event, nodeId).nextSelected;
@@ -3139,9 +3128,6 @@ function InfiniteCanvasPage() {
                     }}
                     onCanvasMouseDown={(event) => {
                         if (!referencePickerNodeId) handleCanvasMouseDown(event);
-                    }}
-                    onPanGesture={(panning) => {
-                        canvasPanningRef.current = panning;
                     }}
                     onCanvasDeselect={referencePickerNodeId ? undefined : deselectCanvas}
                     onCanvasDoubleClick={(event) => {
